@@ -97,7 +97,7 @@ export class Billboard {
     // Setup collider for the whole billboard
     this.collider = {
       position: new THREE.Vector3(position.x, position.y, position.z),
-      size: new THREE.Vector3(width, height, 0.5) // A bit of depth for collision
+      size: new THREE.Vector3(width, height, 1.5) // Increased depth for better collision detection
     };
     
     // Add cast and receive shadows

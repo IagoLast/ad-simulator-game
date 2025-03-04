@@ -12,6 +12,7 @@ export interface GameState {
   prevTime: number;
   playerCollider: Collider;
   isOnGround: boolean;
+  currentWeaponIndex: number;
 }
 
 export interface Collider {
@@ -31,4 +32,29 @@ export interface Obstacle {
 export type CollisionResult = {
   collided: boolean;
   penetration?: THREE.Vector3;
-}; 
+};
+
+export interface WeaponStats {
+  name: string;
+  damage: number;
+  fireRate: number;
+  projectileSpeed: number;
+  projectileLifespan: number;
+  accuracy: number;
+  ammoCapacity: number;
+  reloadTime: number;
+  automatic: boolean;
+}
+
+export interface WeaponState {
+  currentAmmo: number;
+  reloading: boolean;
+  cooldown: number;
+}
+
+export enum ProjectileType {
+  PAINTBALL,
+  WATER_BALLOON,
+  FIREBALL,
+  LASER
+} 

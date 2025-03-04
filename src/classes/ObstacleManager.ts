@@ -7,11 +7,8 @@ export class ObstacleManager {
   private scene: THREE.Scene;
   private billboards: Billboard[] = [];
   private advertisementTexts: string[] = [
-    'www.timetime.in',
-    'www.theristack.com',
-    'www.neon-example.com',
-    'www.minimal-design.com',
-    'www.vintage-ads.com'
+    'www.TimeTime.in',
+    'www.TheirStack.com',
   ];
   
   constructor(scene: THREE.Scene) {

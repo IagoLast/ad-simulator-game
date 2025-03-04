@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Player } from './classes/Player';
 import { ObstacleManager } from './classes/ObstacleManager';
 import { CollisionSystem } from './classes/CollisionSystem';
-import { WeaponSystem } from './classes/WeaponSystem';
+import { WeaponManager } from './classes/WeaponManager';
 import { BotManager } from './classes/BotManager';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { GameState, Obstacle } from './types';
@@ -33,7 +33,8 @@ const gameState: GameState = {
     radius: 0.5,
     height: 3.0,
   },
-  isOnGround: false
+  isOnGround: false,
+  currentWeaponIndex: 0
 };
 
 // Game objects
@@ -45,13 +46,14 @@ let renderer: THREE.WebGLRenderer;
 let player: Player;
 let obstacleManager: ObstacleManager;
 let collisionSystem: CollisionSystem;
-let weaponSystem: WeaponSystem;
+let weaponManager: WeaponManager;
 let botManager: BotManager;
 
 // Bot spawning variables
 let lastBotSpawnTime = 0;
 const botSpawnInterval = 15000; // Generar bots cada 15 segundos
 const botsPerWave = 3; // Número de bots por oleada
+let nextWaveCountdown = botSpawnInterval / 1000; // Contador en segundos
 
 // Initialize the scene
 function initScene(): void {
@@ -81,6 +83,7 @@ function initScene(): void {
 function setupEventListeners(): void {
   const instructions = document.getElementById('instructions');
   const crosshair = document.getElementById('crosshair');
+  const waveCountdown = document.getElementById('wave-countdown');
   
   if (!instructions || !crosshair) return;
 
@@ -91,11 +94,17 @@ function setupEventListeners(): void {
   controls.addEventListener('lock', () => {
     instructions.style.display = 'none';
     crosshair.style.display = 'block';
+    if (waveCountdown) {
+      waveCountdown.style.display = 'block';
+    }
   });
 
   controls.addEventListener('unlock', () => {
     instructions.style.display = 'block';
     crosshair.style.display = 'none';
+    if (waveCountdown) {
+      waveCountdown.style.display = 'none';
+    }
   });
 
   // Movement controls
@@ -104,20 +113,40 @@ function setupEventListeners(): void {
       case 'KeyW':
         gameState.moveForward = true;
         break;
-      case 'KeyA':
-        gameState.moveLeft = true;
-        break;
       case 'KeyS':
         gameState.moveBackward = true;
+        break;
+      case 'KeyA':
+        gameState.moveLeft = true;
         break;
       case 'KeyD':
         gameState.moveRight = true;
         break;
       case 'Space':
         if (gameState.canJump) {
-          gameState.velocity.y = JUMP_FORCE;
+          gameState.velocity.y += JUMP_FORCE;
           gameState.canJump = false;
         }
+        break;
+      // Añadir teclas para cambiar de arma
+      case 'Digit1': // Tecla 1
+      case 'Digit2': // Tecla 2
+      case 'Digit3': // Tecla 3
+        // Cambiar al arma correspondiente (0-indexed)
+        const weaponIndex = parseInt(event.code.slice(-1)) - 1;
+        if (weaponIndex >= 0 && weaponIndex < 3) {
+          gameState.currentWeaponIndex = weaponIndex;
+          weaponManager.setWeapon(weaponIndex);
+        }
+        break;
+      case 'KeyQ': // Arma anterior
+        weaponManager.previousWeapon();
+        break;
+      case 'KeyE': // Arma siguiente
+        weaponManager.nextWeapon();
+        break;
+      case 'KeyR': // Recargar
+        weaponManager.reload();
         break;
     }
   });
@@ -127,11 +156,11 @@ function setupEventListeners(): void {
       case 'KeyW':
         gameState.moveForward = false;
         break;
-      case 'KeyA':
-        gameState.moveLeft = false;
-        break;
       case 'KeyS':
         gameState.moveBackward = false;
+        break;
+      case 'KeyA':
+        gameState.moveLeft = false;
         break;
       case 'KeyD':
         gameState.moveRight = false;
@@ -142,7 +171,20 @@ function setupEventListeners(): void {
   // Shooting
   document.addEventListener('mousedown', (event) => {
     if (event.button === 0 && controls.isLocked) { // Left mouse button
-      weaponSystem.shoot();
+      // Si es un arma automática, iniciar disparo automático
+      if (weaponManager.getCurrentWeapon().isAutomatic()) {
+        weaponManager.startAutoFire();
+      } else {
+        // Si no es automática, solo dispara una vez
+        weaponManager.shoot();
+      }
+    }
+  });
+
+  // Añadir evento para detener el disparo automático
+  document.addEventListener('mouseup', (event) => {
+    if (event.button === 0 && controls.isLocked) { // Left mouse button
+      weaponManager.stopAutoFire();
     }
   });
 
@@ -189,10 +231,10 @@ function handleCollisions(): void {
   collisionSystem.update();
   
   // Check player projectile collisions with bots
-  botManager.checkProjectileCollisions(weaponSystem.getProjectiles());
+  botManager.checkProjectileCollisions(weaponManager.getAllProjectiles());
   
   // Check if player has been hit by bot projectiles (to be implemented)
-  const playerCollisions = weaponSystem.checkPlayerCollisions(player.collider);
+  const playerCollisions = weaponManager.checkPlayerCollisions(player.collider);
   
   if (playerCollisions > 0) {
     player.takeDamage(10 * playerCollisions);
@@ -212,6 +254,7 @@ function spawnBots(): void {
   // Verificar si es momento de generar una nueva oleada de bots
   if (currentTime - lastBotSpawnTime > botSpawnInterval) {
     lastBotSpawnTime = currentTime;
+    nextWaveCountdown = botSpawnInterval / 1000; // Reiniciar el contador
     
     // Encontrar posiciones adecuadas para los bots
     const spawnPositions = [];
@@ -325,6 +368,9 @@ function animate(): void {
     // Update bot manager
     botManager.update(delta, player.controls.getObject().position, obstacleManager.getObstacles());
     
+    // Update the wave countdown
+    updateWaveCountdown(time);
+    
     // Check if it's time to spawn new bots
     spawnBots();
     
@@ -332,11 +378,31 @@ function animate(): void {
     handleCollisions();
     
     // Update weapon system
-    weaponSystem.update(delta, obstacleManager.getObstacles());
+    weaponManager.update(delta, obstacleManager.getObstacles());
   }
   
   renderer.render(scene, camera);
   gameState.prevTime = time;
+}
+
+// Update the countdown for the next bot wave
+function updateWaveCountdown(currentTime: number): void {
+  const timeRemaining = Math.max(0, botSpawnInterval - (currentTime - lastBotSpawnTime));
+  nextWaveCountdown = Math.ceil(timeRemaining / 1000);
+  
+  const countdownElement = document.getElementById('wave-countdown');
+  if (countdownElement) {
+    countdownElement.textContent = `Next wave: ${nextWaveCountdown}s`;
+    
+    // Cambiar el color según el tiempo restante
+    if (nextWaveCountdown <= 5) {
+      countdownElement.style.backgroundColor = 'rgba(255, 0, 0, 0.8)';
+    } else if (nextWaveCountdown <= 10) {
+      countdownElement.style.backgroundColor = 'rgba(255, 165, 0, 0.6)';
+    } else {
+      countdownElement.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
+    }
+  }
 }
 
 // Initialize the game
@@ -345,6 +411,12 @@ function init(): void {
   const crosshair = document.getElementById('crosshair');
   if (crosshair) {
     crosshair.style.display = 'none';
+  }
+  
+  // Hide wave countdown initially
+  const waveCountdown = document.getElementById('wave-countdown');
+  if (waveCountdown) {
+    waveCountdown.style.display = 'none';
   }
   
   // Initialize scene
@@ -364,7 +436,10 @@ function init(): void {
   collisionSystem = new CollisionSystem(player, obstacleManager);
   
   // Initialize weapon system
-  weaponSystem = new WeaponSystem(scene, player);
+  weaponManager = new WeaponManager(scene, player);
+  
+  // Mostrar información del arma inicial
+  weaponManager.displayWeaponInfo();
   
   // Setup event listeners
   setupEventListeners();

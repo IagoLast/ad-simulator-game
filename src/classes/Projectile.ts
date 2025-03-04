@@ -8,6 +8,7 @@ export class Projectile {
   public color: number;
   public lifespan: number = 2; // Seconds before disappearing
   public damage: number = 10;
+  public customRadius: number = 0.15; // Radio personalizable para colisiones
   private trail: THREE.Points | null = null;
   
   constructor(
@@ -27,6 +28,9 @@ export class Projectile {
     // Set velocity based on direction and speed
     this.velocity = direction.normalize().multiplyScalar(speed);
     
+    // Debug log para verificar la velocidad inicial
+    console.log(`Proyectil creado con velocidad: (${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(2)}, ${this.velocity.z.toFixed(2)})`);
+    
     // Add optional trail effect
     this.createTrail(scene);
     
@@ -36,6 +40,9 @@ export class Projectile {
   
   public update(delta: number): void {
     if (!this.isActive) return;
+    
+    // Log para depuración
+    console.log(`Actualizando proyectil: Pos=(${this.mesh.position.x.toFixed(2)}, ${this.mesh.position.y.toFixed(2)}, ${this.mesh.position.z.toFixed(2)}), Vel=(${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(2)}, ${this.velocity.z.toFixed(2)})`);
     
     // Apply gravity to velocity - using projectile-specific gravity
     this.velocity.y -= PROJECTILE_GRAVITY * delta;
@@ -117,7 +124,7 @@ export class Projectile {
   }
   
   public getRadius(): number {
-    return 0.15; // Same as sphere radius
+    return this.customRadius; // Usar el radio personalizado en lugar de un valor fijo
   }
   
   public remove(scene: THREE.Scene): void {
