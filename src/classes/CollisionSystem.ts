@@ -1,5 +1,3 @@
-import * as THREE from 'three';
-import { Collider, Obstacle, CollisionResult } from '../types';
 import { checkCapsuleBoxCollision } from '../physics';
 import { Player } from './Player';
 import { ObstacleManager } from './ObstacleManager';

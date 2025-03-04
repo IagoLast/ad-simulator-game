@@ -243,11 +243,11 @@ export class WeaponManager {
   }
 
   /**
-   * Updates projectile positions and checks for collisions
-   * @param delta Time since last frame
+   * Updates all projectiles and checks for collisions with obstacles
+   * @param delta Time since last frame in seconds
    * @param obstacles Obstacles to check for collisions
    */
-  private updateProjectiles(delta: number, obstacles: Obstacle[]): void {
+  private updateProjectiles(_delta: number, obstacles: Obstacle[]): void {
     // Get all projectiles from all weapons
     const allProjectiles = this.getAllProjectiles();
     
@@ -441,9 +441,9 @@ export class WeaponManager {
    * @param mesh The obstacle mesh
    * @returns The collision point
    */
-  private getCollisionPoint(projectilePosition: THREE.Vector3, mesh: THREE.Mesh | THREE.Group): THREE.Vector3 {
-    // For simple implementation, just return the projectile position
-    // In a more advanced implementation, this would use raycasting to find exact point
+  private getCollisionPoint(projectilePosition: THREE.Vector3, _mesh: THREE.Mesh | THREE.Group): THREE.Vector3 {
+    // We don't have proper ray-triangle collision detection yet,
+    // so we'll just return the projectile position as an approximation
     return projectilePosition.clone();
   }
   

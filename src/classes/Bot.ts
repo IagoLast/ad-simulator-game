@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { Collider, Obstacle } from '../types';
-import { GRAVITY, MOVEMENT_SPEED } from '../physics';
-import { Projectile } from './Projectile';
+import { Collider, Obstacle, ProjectileType } from '../types';
+import { BaseProjectile } from './projectiles/BaseProjectile';
+import { ProjectileFactory, ProjectileOptions } from './projectiles/ProjectileFactory';
 
 export class Bot {
   // Propiedades del bot
@@ -15,9 +15,16 @@ export class Bot {
   // Propiedades para disparos
   private shootCooldown: number = 0;
   private shootCooldownTime: number = 1.5; // 1.5 segundos entre disparos
-  private projectiles: Projectile[] = [];
+  private projectiles: BaseProjectile[] = [];
   private maxProjectiles: number = 5; // Límite de proyectiles por bot
   private projectileSpeed: number = 40;
+  private projectileType: ProjectileType = ProjectileType.PAINTBALL; // Tipo de proyectil por defecto
+  private projectileColor: number = 0xff0000; // Color rojo por defecto para bots
+  private projectileOptions: ProjectileOptions = {
+    damage: 1,
+    lifespan: 3,
+    radius: 0.15
+  };
   
   // Propiedades para el movimiento
   private movementPattern: 'patrol' | 'chase' | 'random' = 'patrol';
@@ -93,7 +100,7 @@ export class Bot {
     }
     
     // Actualizar proyectiles
-    this.updateProjectiles(delta, obstacles, scene);
+    this.updateProjectiles(delta, scene);
     
     // Actualizar movimiento según el patrón seleccionado
     switch (this.movementPattern) {
@@ -124,7 +131,7 @@ export class Bot {
     }
   }
   
-  private updatePatrolMovement(delta: number, obstacles: Obstacle[]): void {
+  private updatePatrolMovement(delta: number, _obstacles: Obstacle[]): void {
     // Mover hacia el punto de patrulla actual
     const direction = new THREE.Vector3().subVectors(this.targetPosition, this.mesh.position).normalize();
     
@@ -150,7 +157,7 @@ export class Bot {
     }
   }
   
-  private updateChaseMovement(delta: number, playerPosition: THREE.Vector3, obstacles: Obstacle[]): void {
+  private updateChaseMovement(delta: number, playerPosition: THREE.Vector3, _obstacles: Obstacle[]): void {
     // Mover hacia el jugador
     const direction = new THREE.Vector3().subVectors(playerPosition, this.mesh.position).normalize();
     
@@ -169,7 +176,7 @@ export class Bot {
     this.collider.position.copy(this.mesh.position);
   }
   
-  private updateRandomMovement(delta: number, obstacles: Obstacle[]): void {
+  private updateRandomMovement(delta: number, _obstacles: Obstacle[]): void {
     // Actualizar temporizador de cambio de dirección
     this.changeDirectionTimer -= delta;
     if (this.changeDirectionTimer <= 0) {
@@ -213,6 +220,34 @@ export class Bot {
     this.mesh.rotation.y = -newAngle;
   }
   
+  /**
+   * Establece el tipo de proyectil que usará el bot
+   * @param type Tipo de proyectil
+   * @param options Opciones adicionales del proyectil
+   */
+  public setProjectileType(type: ProjectileType, options: ProjectileOptions = {}): void {
+    this.projectileType = type;
+    // Combinar las opciones predeterminadas con las opciones personalizadas
+    this.projectileOptions = {
+      ...this.projectileOptions,
+      ...options,
+      speed: options.speed || this.projectileSpeed
+    };
+    console.log(`Bot ahora usa proyectiles de tipo: ${type}`);
+  }
+
+  /**
+   * Configura este bot para disparar proyectiles rebotantes
+   * @param bounces Número máximo de rebotes
+   */
+  public useBounceBallProjectiles(bounces: number = 3): void {
+    this.setProjectileType(ProjectileType.BOUNCE_BALL, {
+      maxBounces: bounces,
+      damage: 1,
+      color: 0xff5500 // Naranja para proyectiles rebotantes de bots
+    });
+  }
+
   private shootAtTarget(targetPosition: THREE.Vector3, scene: THREE.Scene): void {
     if (this.shootCooldown > 0) return;
     
@@ -237,8 +272,16 @@ export class Bot {
     direction.z += (Math.random() - 0.5) * randomSpread;
     direction.normalize();
     
-    // Crear proyectil (rojo para los bots)
-    const projectile = new Projectile(shootPosition, direction, scene, 0xff0000, this.projectileSpeed);
+    // Crear proyectil usando el ProjectileFactory
+    const projectile = ProjectileFactory.createProjectile(
+      this.projectileType,
+      shootPosition,
+      direction,
+      scene,
+      this.projectileColor,
+      this.projectileOptions
+    );
+    
     this.projectiles.push(projectile);
     
     // Limitar el número de proyectiles
@@ -250,42 +293,30 @@ export class Bot {
     }
   }
   
-  private updateProjectiles(delta: number, obstacles: Obstacle[], scene: THREE.Scene): void {
+  /**
+   * Actualiza los proyectiles del bot
+   * @param delta Tiempo transcurrido desde el último frame
+   * @param scene Escena para poder eliminar proyectiles
+   */
+  public updateProjectiles(delta: number, scene: THREE.Scene): void {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const projectile = this.projectiles[i];
+      projectile.update(delta);
       
-      if (projectile.isActive) {
-        projectile.update(delta);
-        
-        // Comprobar colisiones con obstáculos
-        for (const obstacle of obstacles) {
-          const obstaclePos = obstacle.collider.position;
-          const projectilePos = projectile.getPosition();
-          const obstacleSize = obstacle.collider.size;
-          
-          if (
-            projectilePos.x > obstaclePos.x - obstacleSize.x/2 - projectile.getRadius() &&
-            projectilePos.x < obstaclePos.x + obstacleSize.x/2 + projectile.getRadius() &&
-            projectilePos.y > obstaclePos.y - obstacleSize.y/2 - projectile.getRadius() &&
-            projectilePos.y < obstaclePos.y + obstacleSize.y/2 + projectile.getRadius() &&
-            projectilePos.z > obstaclePos.z - obstacleSize.z/2 - projectile.getRadius() &&
-            projectilePos.z < obstaclePos.z + obstacleSize.z/2 + projectile.getRadius()
-          ) {
-            projectile.deactivate();
-            break;
-          }
-        }
-        
-        // Comprobar colisión con el suelo
-        if (projectile.getPosition().y <= projectile.getRadius()) {
-          projectile.deactivate();
-        }
-      } else {
-        // Eliminar proyectiles inactivos
+      // Eliminar proyectiles inactivos
+      if (!projectile.isActive) {
         projectile.remove(scene);
         this.projectiles.splice(i, 1);
       }
     }
+  }
+  
+  /**
+   * Obtiene los proyectiles activos del bot
+   * @returns Array de proyectiles activos
+   */
+  public getProjectiles(): BaseProjectile[] {
+    return this.projectiles;
   }
   
   public takeDamage(): boolean {
@@ -317,10 +348,6 @@ export class Bot {
     }
     
     return false; // Sigue vivo
-  }
-  
-  public getProjectiles(): Projectile[] {
-    return this.projectiles;
   }
   
   public deactivate(): void {

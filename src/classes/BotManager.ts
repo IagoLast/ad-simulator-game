@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Bot } from './Bot';
 import { Obstacle } from '../types';
-import { Projectile } from './Projectile';
+import { BaseProjectile } from './projectiles/BaseProjectile';
 
 export class BotManager {
   public bots: Bot[] = [];
@@ -65,7 +65,7 @@ export class BotManager {
     }
   }
   
-  public checkProjectileCollisions(projectiles: Projectile[]): void {
+  public checkProjectileCollisions(projectiles: BaseProjectile[]): void {
     // Comprobar colisiones entre proyectiles del jugador y bots
     if (projectiles.length === 0 || this.bots.length === 0) return;
     
@@ -201,8 +201,8 @@ export class BotManager {
   }
   
   // Añadir método para obtener todos los proyectiles de los bots
-  public getAllBotProjectiles(): Projectile[] {
-    const allProjectiles: Projectile[] = [];
+  public getAllBotProjectiles(): BaseProjectile[] {
+    const allProjectiles: BaseProjectile[] = [];
     
     for (const bot of this.bots) {
       if (bot.isActive && bot.getProjectiles) {
@@ -215,4 +215,18 @@ export class BotManager {
   
   // Propiedad para tracking de estadísticas
   private _lastStatsTime: number = 0;
+
+  /**
+   * Crea un bot que dispara proyectiles rebotantes
+   * @param position Posición inicial del bot
+   * @param bounces Número máximo de rebotes de los proyectiles
+   * @param patrolPoints Puntos de patrulla opcionales
+   * @returns El bot creado
+   */
+  public spawnBounceBot(position: THREE.Vector3, bounces: number = 3, patrolPoints?: THREE.Vector3[]): Bot {
+    const bot = this.spawnBot(position, patrolPoints);
+    bot.useBounceBallProjectiles(bounces);
+    console.log(`Bot rebotante creado en (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+    return bot;
+  }
 } 

@@ -47,12 +47,9 @@ export class PaintballProjectile extends BaseProjectile {
   
   /**
    * Handles collision response when hitting an obstacle
-   * @param position Position of the collision
-   * @param normal Surface normal at the collision point
-   * @returns Always returns true as paintballs deactivate on impact
+   * Paintballs always deactivate on collision
    */
-  public onCollision(position: THREE.Vector3, normal: THREE.Vector3): boolean {
-    // Standard paintball always deactivates on collision
-    return true;
+  public onCollision(_position: THREE.Vector3, _normal: THREE.Vector3): boolean {
+    return true; // Deactivate the projectile
   }
 } 

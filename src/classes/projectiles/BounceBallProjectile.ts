@@ -103,7 +103,7 @@ export class BounceBallProjectile extends BaseProjectile {
    * Updates visual effects for the bouncing ball
    * @param delta Time since last frame in seconds
    */
-  protected updateEffects(delta: number): void {
+  protected updateEffects(_delta: number): void {
     if (this.trail) {
       // Update the trail particles
       const positions = (this.trail.geometry as THREE.BufferGeometry).getAttribute('position');

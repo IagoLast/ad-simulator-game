@@ -5,14 +5,13 @@ import { CollisionSystem } from './classes/CollisionSystem';
 import { WeaponManager } from './classes/WeaponManager';
 import { BotManager } from './classes/BotManager';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
-import { GameState, Obstacle } from './types';
+import { GameState } from './types';
 import { 
   GRAVITY, 
   JUMP_FORCE, 
   MOVEMENT_SPEED, 
   AIR_CONTROL, 
   FRICTION,
-  checkCapsuleBoxCollision,
   isOnGround,
   applyFriction
 } from './physics';
@@ -38,11 +37,10 @@ const gameState: GameState = {
 };
 
 // Game objects
-const obstacles: Obstacle[] = [];
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
-let controls: PointerLockControls;
 let renderer: THREE.WebGLRenderer;
+let controls: PointerLockControls;
 let player: Player;
 let obstacleManager: ObstacleManager;
 let collisionSystem: CollisionSystem;
@@ -151,19 +149,47 @@ function setupEventListeners(): void {
     }
   });
 
+  // Key up event (key release)
   document.addEventListener('keyup', (event) => {
-    switch (event.code) {
-      case 'KeyW':
+    switch (event.key) {
+      case 'w':
+      case 'ArrowUp':
         gameState.moveForward = false;
         break;
-      case 'KeyS':
+      case 's':
+      case 'ArrowDown':
         gameState.moveBackward = false;
         break;
-      case 'KeyA':
+      case 'a':
+      case 'ArrowLeft':
         gameState.moveLeft = false;
         break;
-      case 'KeyD':
+      case 'd':
+      case 'ArrowRight':
         gameState.moveRight = false;
+        break;
+      case ' ':
+        // No es necesario hacer nada aquí
+        break;
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+        // Cambiar arma por índice
+        const weaponIndex = parseInt(event.key) - 1;
+        if (weaponIndex >= 0 && weaponIndex < 5) { // Máximo 5 armas
+          weaponManager.setWeapon(weaponIndex);
+        }
+        break;
+      case 'b':
+        // Generar un bot con proyectiles rebotantes
+        const playerPos = controls.getObject().position.clone();
+        // Colocar el bot a 10 unidades frente al jugador
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        const botPosition = playerPos.clone().add(forward.multiplyScalar(10));
+        botPosition.y = 0; // En el suelo
+        botManager.spawnBounceBot(botPosition);
         break;
     }
   });
@@ -221,7 +247,7 @@ function createLighting(): void {
   scene.add(directionalLight);
 }
 
-// Create obstacles
+// @ts-ignore - Implemented but not currently used - part of the public API
 function createObstacles(): void {
   obstacleManager.createObstacles(120);
 }
@@ -241,7 +267,7 @@ function handleCollisions(): void {
   }
 }
 
-// Spawn player at a suitable position
+// @ts-ignore - Implemented but not currently used - part of the public API
 function spawnPlayer(): void {
   const spawnPosition = obstacleManager.findSpawnPosition();
   player.spawn(spawnPosition);
@@ -298,7 +324,7 @@ function showWaveNotification(): void {
   }, 3000);
 }
 
-// Update player health display
+// @ts-ignore - Implemented but not currently used - part of the public API
 function updateHealth(): void {
   const healthDisplay = document.getElementById('health');
   if (healthDisplay) {

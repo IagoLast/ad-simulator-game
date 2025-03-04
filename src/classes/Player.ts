@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
-import { Collider, Obstacle } from '../types';
+import { Collider } from '../types';
 import { JUMP_FORCE, GRAVITY, MOVEMENT_SPEED, AIR_CONTROL, FRICTION, isOnGround, applyFriction } from '../physics';
 
 export class Player {

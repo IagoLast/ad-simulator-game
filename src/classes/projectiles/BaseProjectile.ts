@@ -139,7 +139,7 @@ export abstract class BaseProjectile {
    * Updates visual effects like trails, particles, etc.
    * @param delta Time since last frame in seconds
    */
-  protected updateEffects(delta: number): void {
+  protected updateEffects(_delta: number): void {
     // Default implementation does nothing
     // Subclasses can override to add effects
   }
@@ -148,7 +148,7 @@ export abstract class BaseProjectile {
    * Creates a trail effect for the projectile
    * @param scene The Three.js scene
    */
-  protected createTrail(scene: THREE.Scene): void {
+  protected createTrail(_scene: THREE.Scene): void {
     // Default implementation does nothing
     // Subclasses can override to add custom trail effects
   }
@@ -210,7 +210,7 @@ export abstract class BaseProjectile {
    * @param normal Surface normal at the collision point
    * @returns Whether the projectile should be deactivated after collision
    */
-  public onCollision(position: THREE.Vector3, normal: THREE.Vector3): boolean {
+  public onCollision(_position: THREE.Vector3, _normal: THREE.Vector3): boolean {
     // Default behavior is to deactivate on collision
     return true;
   }
@@ -220,7 +220,7 @@ export abstract class BaseProjectile {
    * @param position Position of the collision
    * @returns Whether the projectile should be deactivated after collision
    */
-  public onGroundCollision(position: THREE.Vector3): boolean {
+  public onGroundCollision(_position: THREE.Vector3): boolean {
     // Default behavior is to deactivate on collision
     return true;
   }
