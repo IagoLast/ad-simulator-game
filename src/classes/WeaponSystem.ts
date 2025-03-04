@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Projectile } from './Projectile';
 import { Player } from './Player';
-import { Obstacle } from '../types';
+import { Obstacle, Collider } from '../types';
 
 export class WeaponSystem {
   private scene: THREE.Scene;
@@ -11,6 +11,9 @@ export class WeaponSystem {
   private cooldownTime: number = 0.5; // Half second between shots
   private maxProjectiles: number = 30; // Maximum number of projectiles to avoid performance issues
   private projectileSpeed: number = 50; // Increased speed as requested
+  
+  // Array para almacenar proyectiles de bots
+  private botProjectiles: Projectile[] = [];
   
   constructor(scene: THREE.Scene, player: Player) {
     this.scene = scene;
@@ -118,7 +121,48 @@ export class WeaponSystem {
     const projectile = new Projectile(position, direction, this.scene, color, this.projectileSpeed);
     this.projectiles.push(projectile);
     
+    console.log(`Disparo creado. Total de proyectiles activos: ${this.projectiles.length}`);
+    
     // Play sound (to be implemented)
+  }
+  
+  // Método para obtener los proyectiles del jugador (para colisiones con bots)
+  public getProjectiles(): Projectile[] {
+    return this.projectiles;
+  }
+  
+  // Método para verificar colisiones de proyectiles de bots con el jugador
+  public checkPlayerCollisions(playerCollider: Collider): number {
+    let hitCount = 0;
+    
+    // Obtener botManager de la ventana global
+    const botManager = (window as any).botManager;
+    if (!botManager) return 0;
+    
+    // Obtener todos los proyectiles de bots
+    const botProjectiles = botManager.getAllBotProjectiles();
+    
+    // Verificar colisiones con el jugador
+    for (const projectile of botProjectiles) {
+      if (!projectile.isActive) continue;
+      
+      const projectilePos = projectile.getPosition();
+      const projectileRadius = projectile.getRadius();
+      
+      // Calcular distancia al jugador
+      const distance = projectilePos.distanceTo(playerCollider.position);
+      
+      // Si el proyectil está lo suficientemente cerca del jugador
+      if (distance < projectileRadius + playerCollider.radius) {
+        // Desactivar el proyectil
+        projectile.deactivate();
+        
+        // Incrementar contador de impactos
+        hitCount++;
+      }
+    }
+    
+    return hitCount;
   }
   
   private createPaintSplash(position: THREE.Vector3, color: number, target: THREE.Mesh | THREE.Group): void {

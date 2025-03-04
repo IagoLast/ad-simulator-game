@@ -3,6 +3,7 @@ import { Player } from './classes/Player';
 import { ObstacleManager } from './classes/ObstacleManager';
 import { CollisionSystem } from './classes/CollisionSystem';
 import { WeaponSystem } from './classes/WeaponSystem';
+import { BotManager } from './classes/BotManager';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { GameState, Obstacle } from './types';
 import { 
@@ -45,6 +46,12 @@ let player: Player;
 let obstacleManager: ObstacleManager;
 let collisionSystem: CollisionSystem;
 let weaponSystem: WeaponSystem;
+let botManager: BotManager;
+
+// Bot spawning variables
+let lastBotSpawnTime = 0;
+const botSpawnInterval = 15000; // Generar bots cada 15 segundos
+const botsPerWave = 3; // Número de bots por oleada
 
 // Initialize the scene
 function initScene(): void {
@@ -174,63 +181,81 @@ function createLighting(): void {
 
 // Create obstacles
 function createObstacles(): void {
-  obstacleManager = new ObstacleManager(scene);
   obstacleManager.createObstacles(120);
 }
 
-// Check and resolve collisions between player and obstacles
+// Handle collisions between player and obstacles
 function handleCollisions(): void {
-  // Update player collider position to match camera position
-  const playerPosition = controls.getObject().position;
-  gameState.playerCollider.position.copy(playerPosition);
+  collisionSystem.update();
   
-  // Check collisions with all obstacles
-  for (const obstacle of obstacles) {
-    const result = checkCapsuleBoxCollision(gameState.playerCollider, obstacle);
-    
-    if (result.collided && result.penetration) {
-      // Resolve collision by moving player away
-      playerPosition.add(result.penetration);
-      
-      // If collision is on y-axis, stop vertical velocity
-      if (Math.abs(result.penetration.y) > 0.01) {
-        gameState.velocity.y = 0;
-      }
-    }
+  // Check player projectile collisions with bots
+  botManager.checkProjectileCollisions(weaponSystem.getProjectiles());
+  
+  // Check if player has been hit by bot projectiles (to be implemented)
+  const playerCollisions = weaponSystem.checkPlayerCollisions(player.collider);
+  
+  if (playerCollisions > 0) {
+    player.takeDamage(10 * playerCollisions);
   }
 }
 
-// Spawn player at random position
+// Spawn player at a suitable position
 function spawnPlayer(): void {
-  // Random spawn position
-  let spawnX = Math.random() * 180 - 90;
-  let spawnZ = Math.random() * 180 - 90;
-  
-  // Ensure player doesn't spawn inside an obstacle
-  let validSpawn = false;
-  while (!validSpawn) {
-    validSpawn = true;
-    for (const obstacle of obstacles) {
-      const obstaclePos = obstacle.mesh.position;
-      const distance = Math.sqrt(
-        Math.pow(spawnX - obstaclePos.x, 2) + 
-        Math.pow(spawnZ - obstaclePos.z, 2)
-      );
-      if (distance < 3) {
-        validSpawn = false;
-        spawnX = Math.random() * 180 - 90;
-        spawnZ = Math.random() * 180 - 90;
-        break;
-      }
-    }
-  }
-  
-  controls.getObject().position.set(spawnX, 1.8, spawnZ);
-  gameState.velocity.set(0, 0, 0);
-  gameState.playerCollider.position.set(spawnX, 1.8, spawnZ);
+  const spawnPosition = obstacleManager.findSpawnPosition();
+  player.spawn(spawnPosition);
 }
 
-// Update health display
+// Spawn bots at suitable positions
+function spawnBots(): void {
+  const currentTime = performance.now();
+  
+  // Verificar si es momento de generar una nueva oleada de bots
+  if (currentTime - lastBotSpawnTime > botSpawnInterval) {
+    lastBotSpawnTime = currentTime;
+    
+    // Encontrar posiciones adecuadas para los bots
+    const spawnPositions = [];
+    for (let i = 0; i < botsPerWave; i++) {
+      const spawnPosition = obstacleManager.findSpawnPosition();
+      spawnPositions.push(spawnPosition);
+    }
+    
+    // Generar los bots
+    botManager.spawnBots(botsPerWave, spawnPositions);
+    
+    // Mostrar mensaje de nueva oleada
+    showWaveNotification();
+  }
+}
+
+// Mostrar notificación de nueva oleada
+function showWaveNotification(): void {
+  const notification = document.createElement('div');
+  notification.classList.add('wave-notification');
+  notification.textContent = '¡Nueva oleada de bots!';
+  document.body.appendChild(notification);
+  
+  // Estilo para la notificación
+  notification.style.position = 'absolute';
+  notification.style.top = '20%';
+  notification.style.left = '50%';
+  notification.style.transform = 'translateX(-50%)';
+  notification.style.padding = '10px 20px';
+  notification.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
+  notification.style.color = 'white';
+  notification.style.fontFamily = 'Arial, sans-serif';
+  notification.style.fontSize = '24px';
+  notification.style.fontWeight = 'bold';
+  notification.style.borderRadius = '5px';
+  notification.style.zIndex = '1000';
+  
+  // Eliminar la notificación después de unos segundos
+  setTimeout(() => {
+    document.body.removeChild(notification);
+  }, 3000);
+}
+
+// Update player health display
 function updateHealth(): void {
   const healthDisplay = document.getElementById('health');
   if (healthDisplay) {
@@ -297,6 +322,12 @@ function animate(): void {
     // Update player movement
     updatePlayerMovement(delta);
     
+    // Update bot manager
+    botManager.update(delta, player.controls.getObject().position, obstacleManager.getObstacles());
+    
+    // Check if it's time to spawn new bots
+    spawnBots();
+    
     // Update collision system
     handleCollisions();
     
@@ -326,6 +357,9 @@ function init(): void {
   obstacleManager = new ObstacleManager(scene);
   obstacleManager.createObstacles(120);
   
+  // Initialize bot manager
+  botManager = new BotManager(scene);
+  
   // Initialize collision system
   collisionSystem = new CollisionSystem(player, obstacleManager);
   
@@ -338,6 +372,10 @@ function init(): void {
   // Spawn player at random position
   const spawnPosition = obstacleManager.findSpawnPosition();
   player.spawn(spawnPosition);
+  
+  // Spawn initial bots
+  lastBotSpawnTime = performance.now();
+  spawnBots();
   
   // Update health display
   player.updateHealthDisplay();
