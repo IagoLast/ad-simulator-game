@@ -4,8 +4,8 @@ import { PaintballGun } from './weapons/PaintballGun';
 import { WaterBalloonLauncher } from './weapons/WaterBalloonLauncher';
 import { RapidFirePaintball } from './weapons/RapidFirePaintball';
 import { Obstacle } from '../types';
-import { Projectile } from './Projectile';
 import { Player } from './Player';
+import { BaseProjectile } from './projectiles/BaseProjectile';
 
 export class WeaponManager {
   private scene: THREE.Scene;
@@ -24,59 +24,72 @@ export class WeaponManager {
   }
 
   private initializeWeapons(): void {
-    // Crear instancias de las armas disponibles
-    this.weapons.push(new PaintballGun(this.scene));
-    this.weapons.push(new WaterBalloonLauncher(this.scene));
-    this.weapons.push(new RapidFirePaintball(this.scene));
+    // Inicializar armas
+    const paintballGun = new PaintballGun(this.scene);
+    const waterBalloonLauncher = new WaterBalloonLauncher(this.scene);
+    const rapidFire = new RapidFirePaintball(this.scene);
     
-    console.log(`Armas disponibles: ${this.weapons.length}`);
-    for (const weapon of this.weapons) {
-      console.log(`- ${weapon.getName()}`);
-    }
+    // Añadir a la array de armas
+    this.weapons.push(paintballGun);
+    this.weapons.push(waterBalloonLauncher);
+    this.weapons.push(rapidFire);
+
+    console.log("Armas inicializadas:", this.weapons.length);
+    
+    // Verificar que cada arma esté inicializada correctamente
+    this.weapons.forEach((weapon, index) => {
+      console.log(`Arma ${index}:`, weapon.getName(), 
+        "Munición:", weapon.getCurrentAmmo(), "/", weapon.getMaxAmmo());
+    });
   }
 
+  /**
+   * Updates the state of the current weapon and all projectiles from all weapons
+   * @param delta Time in seconds since the last frame
+   * @param obstacles Array of obstacles to check for collisions
+   */
   public update(delta: number, obstacles: Obstacle[]): void {
-    // Actualizar el arma actual para gestionar recarga, cooldown, etc.
-    if (this.weapons.length > 0) {
-      const currentWeapon = this.getCurrentWeapon();
-      
-      console.log(`Actualizando arma: ${currentWeapon.getName()}, delta: ${delta.toFixed(4)}`);
-      
-      // Actualizar estado del arma actual (cooldown, recarga, etc.)
-      currentWeapon.update(delta);
-      
-      // Actualizar TODAS las armas para que sus proyectiles sigan moviéndose
-      for (const weapon of this.weapons) {
-        if (weapon !== currentWeapon) {
-          // Solo actualizar los proyectiles de las otras armas, no su estado
-          this.updateWeaponProjectiles(weapon, delta);
-        }
-      }
-      
-      // Comprobar colisiones para todos los proyectiles
-      this.updateProjectiles(delta, obstacles);
+    // Update the current weapon state
+    const currentWeapon = this.getCurrentWeapon();
+    currentWeapon.update(delta);
+    
+    console.log(`Actualizando arma: ${currentWeapon.getName()}, delta: ${delta.toFixed(4)}`);
+    
+    // Update projectiles from all weapons
+    for (const weapon of this.weapons) {
+      this.updateWeaponProjectiles(weapon, delta);
     }
+    
+    // Check and handle projectile collisions with obstacles
+    this.updateProjectiles(delta, obstacles);
   }
-
-  // Método auxiliar para actualizar solo los proyectiles de un arma
+  
+  /**
+   * Helper method to update projectiles from a specific weapon
+   * @param weapon The weapon whose projectiles to update
+   * @param delta Time in seconds since the last frame
+   */
   private updateWeaponProjectiles(weapon: Weapon, delta: number): void {
-    // Ahora podemos llamar directamente al método público
+    // Call the weapon's updateProjectiles method
     weapon.updateProjectiles(delta);
   }
-
-  public getCurrentWeapon(): Weapon {
-    return this.weapons[this.currentWeaponIndex];
-  }
-
-  public getAllProjectiles(): Projectile[] {
-    // Recopilar todos los proyectiles de todas las armas
-    const allProjectiles: Projectile[] = [];
+  
+  /**
+   * Gets all projectiles from all weapons
+   * @returns Array of all active projectiles
+   */
+  public getAllProjectiles(): BaseProjectile[] {
+    const allProjectiles: BaseProjectile[] = [];
     
     for (const weapon of this.weapons) {
       allProjectiles.push(...weapon.getProjectiles());
     }
     
     return allProjectiles;
+  }
+
+  public getCurrentWeapon(): Weapon {
+    return this.weapons[this.currentWeaponIndex];
   }
 
   public setWeapon(index: number): void {
@@ -105,48 +118,89 @@ export class WeaponManager {
   }
 
   public displayWeaponInfo(): void {
-    const weapon = this.getCurrentWeapon();
-    console.log(`Arma actual: ${weapon.getName()}`);
+    if (this.weapons.length === 0) return;
     
-    // Actualizar el display de munición
+    const currentWeapon = this.getCurrentWeapon();
+    if (!currentWeapon) return;
+    
+    // Validar que los datos existan antes de mostrarlos
+    const ammo = currentWeapon.getCurrentAmmo();
+    const maxAmmo = currentWeapon.getMaxAmmo();
+    
+    console.log(`Arma actual: ${currentWeapon.getName()}`);
+    console.log(`Munición: ${ammo !== undefined ? ammo : 'N/A'}/${maxAmmo !== undefined ? maxAmmo : 'N/A'}`);
+    
+    // Actualizar la UI
     this.updateAmmoDisplay();
   }
 
   public updateAmmoDisplay(): void {
     const weapon = this.getCurrentWeapon();
+    if (!weapon) return;
+    
     const ammoElement = document.getElementById('ammo');
+    const nameElement = document.getElementById('weapon-name');
+    const ammoCounter = document.getElementById('ammo-counter');
+    
+    const ammo = weapon.getCurrentAmmo();
+    const maxAmmo = weapon.getMaxAmmo();
     
     if (ammoElement) {
-      if (weapon.getMaxAmmo() === -1) {
-        ammoElement.textContent = `Arma: ${weapon.getName()} | Munición: ∞`;
-      } else {
-        ammoElement.textContent = `Arma: ${weapon.getName()} | Munición: ${weapon.getCurrentAmmo()}/${weapon.getMaxAmmo()}`;
-      }
-      
-      // Mostrar estado de recarga si es aplicable
-      if (weapon.isReloading()) {
-        ammoElement.textContent += ' (Recargando...)';
-      }
+        ammoElement.textContent = `Arma: ${weapon.getName()} | Munición: ${ammo}/${maxAmmo}`;
+        
+        // Mostrar estado de recarga si es aplicable
+        if (weapon.isReloading()) {
+            ammoElement.textContent += ' (Recargando...)';
+        }
+    }
+    
+    if (nameElement) {
+        nameElement.textContent = weapon.getName();
+    }
+    
+    if (ammoCounter) {
+        ammoCounter.textContent = `${ammo}/${maxAmmo}`;
     }
   }
 
   public shoot(): void {
-    const currentWeapon = this.getCurrentWeapon();
-    const camera = this.player.controls.getObject();
+    if (this.weapons.length === 0) return;
     
-    // Obtener dirección y posición de la cámara
+    const currentWeapon = this.getCurrentWeapon();
+    
+    // Verificar que el arma tenga munición y no esté en recarga
+    if (currentWeapon.getCurrentAmmo() <= 0) {
+        console.log("Sin munición. Recargando...");
+        this.reload();
+        return;
+    }
+    
+    if (currentWeapon.isReloading()) {
+        console.log("El arma está recargando...");
+        return;
+    }
+    
+    // Obtener la posición y dirección del jugador
+    const camera = this.player.controls.getObject();
+    const position = camera.position.clone();
+    
+    // Calcular la dirección de disparo desde la cámara
     const direction = new THREE.Vector3(0, 0, -1);
     direction.applyQuaternion(camera.quaternion);
     
-    // Crear posición ligeramente adelante de la cámara
-    const position = new THREE.Vector3();
-    position.copy(camera.position).add(direction.clone().multiplyScalar(1.0));
+    // Ajustar la posición para que el disparo salga desde un punto más adelante del jugador
+    const firingOffset = 0.5; // Distancia adelante del jugador
+    position.add(direction.clone().multiplyScalar(firingOffset));
     
-    // Intentar disparar
-    currentWeapon.shoot(position, direction);
+    // Disparar y obtener el proyectil creado
+    const projectile = currentWeapon.shoot(position, direction);
     
-    // Actualizar la interfaz de usuario
+    // Actualizar el display de munición
     this.updateAmmoDisplay();
+    
+    if (projectile) {
+        console.log(`Proyectil disparado desde ${currentWeapon.getName()}. Munición restante: ${currentWeapon.getCurrentAmmo()}`);
+    }
   }
 
   public startAutoFire(): void {
@@ -177,62 +231,75 @@ export class WeaponManager {
     }
   }
 
+  /**
+   * Initiates reload of the current weapon
+   */
   public reload(): void {
     const currentWeapon = this.getCurrentWeapon();
-    currentWeapon.reload();
-    this.updateAmmoDisplay();
+    if (currentWeapon && !currentWeapon.isReloading()) {
+      currentWeapon.reload();
+      console.log(`Reloading weapon: ${currentWeapon.getName()}`);
+    }
   }
 
+  /**
+   * Updates projectile positions and checks for collisions
+   * @param delta Time since last frame
+   * @param obstacles Obstacles to check for collisions
+   */
   private updateProjectiles(delta: number, obstacles: Obstacle[]): void {
-    // Obtener todos los proyectiles de todas las armas
+    // Get all projectiles from all weapons
     const allProjectiles = this.getAllProjectiles();
     
-    // Verificar colisiones con obstáculos
+    console.log(`Actualizando ${allProjectiles.length} proyectiles con detección de colisiones`);
+    
+    // Check each projectile for collisions with obstacles
     for (const projectile of allProjectiles) {
       if (!projectile.isActive) continue;
       
-      // Verificar colisiones con obstáculos
-      for (const obstacle of obstacles) {
-        const obstaclePos = obstacle.collider.position;
-        const projectilePos = projectile.getPosition();
-        const obstacleSize = obstacle.collider.size;
+      const position = projectile.getPosition();
+      const radius = projectile.getRadius();
+      
+      // Check for ground collision first
+      if (position.y <= radius) {
+        console.log(`Colisión con el suelo detectada en (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
         
-        // Simple collision check: if projectile is within obstacle bounds
-        if (
-          projectilePos.x > obstaclePos.x - obstacleSize.x/2 - projectile.getRadius() &&
-          projectilePos.x < obstaclePos.x + obstacleSize.x/2 + projectile.getRadius() &&
-          projectilePos.y > obstaclePos.y - obstacleSize.y/2 - projectile.getRadius() &&
-          projectilePos.y < obstaclePos.y + obstacleSize.y/2 + projectile.getRadius() &&
-          projectilePos.z > obstaclePos.z - obstacleSize.z/2 - projectile.getRadius() &&
-          projectilePos.z < obstaclePos.z + obstacleSize.z/2 + projectile.getRadius()
-        ) {
-          // Desactivar el proyectil al colisionar
+        const shouldDeactivate = projectile.onGroundCollision(
+          new THREE.Vector3(position.x, 0, position.z)
+        );
+        
+        if (shouldDeactivate) {
+          this.createGroundPaintSplash(
+            new THREE.Vector3(position.x, 0.01, position.z),
+            projectile.color
+          );
           projectile.deactivate();
-          
-          // Crear efecto de salpicadura (splash)
-          this.createPaintSplash(projectilePos, projectile.color, obstacle.mesh);
-          break;
+          console.log(`Proyectil desactivado por colisión con el suelo`);
+          continue;
         }
       }
       
-      // Verificar colisión con el suelo
-      if (projectile.getPosition().y <= projectile.getRadius()) {
-        // Corregir posición para evitar hundirse en el suelo
-        projectile.mesh.position.y = projectile.getRadius();
+      // Check for obstacle collisions
+      for (const obstacle of obstacles) {
+        const mesh = obstacle.mesh;
         
-        // Simular rebote con pérdida de energía
-        const bounceEnergy = 0.4; // 40% de energía retenida por rebote
-        
-        if (Math.abs(projectile.velocity.y) < 2.0) {
-          // Si la velocidad es muy baja, crear salpicadura y desactivar
-          this.createGroundPaintSplash(projectile.getPosition(), projectile.color);
-          projectile.deactivate();
-        } else {
-          // Rebotar con pérdida de energía
-          projectile.velocity.y = -projectile.velocity.y * bounceEnergy;
-          // Reducir también la velocidad horizontal para simular fricción
-          projectile.velocity.x *= 0.9;
-          projectile.velocity.z *= 0.9;
+        if (this.checkProjectileCollision(projectile, mesh)) {
+          console.log(`Colisión con obstáculo detectada`);
+          
+          // Apply hit visualization
+          const collisionPoint = this.getCollisionPoint(position, mesh);
+          const normal = this.getCollisionNormal(collisionPoint, mesh);
+          
+          // Let the projectile handle its own collision behavior
+          const shouldDeactivate = projectile.onCollision(collisionPoint, normal);
+          
+          if (shouldDeactivate) {
+            this.createPaintSplash(collisionPoint, projectile.color, mesh);
+            projectile.deactivate();
+            console.log(`Proyectil desactivado por colisión con obstáculo`);
+          }
+          
+          break;
         }
       }
     }
@@ -338,5 +405,84 @@ export class WeaponManager {
     }
     
     return hitCount;
+  }
+
+  /**
+   * Checks if a projectile is colliding with an obstacle mesh
+   * @param projectile The projectile to check
+   * @param mesh The obstacle mesh
+   * @returns Whether collision occurred
+   */
+  private checkProjectileCollision(projectile: BaseProjectile, mesh: THREE.Mesh | THREE.Group): boolean {
+    const projectilePos = projectile.getPosition();
+    const projectileRadius = projectile.getRadius();
+    
+    // Get bounding box of the mesh
+    const bbox = new THREE.Box3().setFromObject(mesh);
+    
+    // Simple bounding box collision check
+    if (
+      projectilePos.x > bbox.min.x - projectileRadius &&
+      projectilePos.x < bbox.max.x + projectileRadius &&
+      projectilePos.y > bbox.min.y - projectileRadius &&
+      projectilePos.y < bbox.max.y + projectileRadius &&
+      projectilePos.z > bbox.min.z - projectileRadius &&
+      projectilePos.z < bbox.max.z + projectileRadius
+    ) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Gets the exact collision point on an obstacle
+   * @param projectilePosition The position of the projectile
+   * @param mesh The obstacle mesh
+   * @returns The collision point
+   */
+  private getCollisionPoint(projectilePosition: THREE.Vector3, mesh: THREE.Mesh | THREE.Group): THREE.Vector3 {
+    // For simple implementation, just return the projectile position
+    // In a more advanced implementation, this would use raycasting to find exact point
+    return projectilePosition.clone();
+  }
+  
+  /**
+   * Gets the surface normal at the collision point
+   * @param collisionPoint The point of collision
+   * @param mesh The obstacle mesh
+   * @returns The surface normal
+   */
+  private getCollisionNormal(collisionPoint: THREE.Vector3, mesh: THREE.Mesh | THREE.Group): THREE.Vector3 {
+    // For simple implementation, estimate normal based on closest face
+    // In a more advanced implementation, this would use raycasting to find exact normal
+    
+    // Get center of the mesh
+    const bbox = new THREE.Box3().setFromObject(mesh);
+    const center = new THREE.Vector3();
+    bbox.getCenter(center);
+    
+    // Calculate direction from center to collision point
+    const normal = collisionPoint.clone().sub(center).normalize();
+    
+    // Determine which face was hit based on the strongest component
+    const absX = Math.abs(normal.x);
+    const absY = Math.abs(normal.y);
+    const absZ = Math.abs(normal.z);
+    
+    const faceNormal = new THREE.Vector3();
+    
+    if (absX > absY && absX > absZ) {
+      // X-axis face
+      faceNormal.set(Math.sign(normal.x), 0, 0);
+    } else if (absY > absX && absY > absZ) {
+      // Y-axis face
+      faceNormal.set(0, Math.sign(normal.y), 0);
+    } else {
+      // Z-axis face
+      faceNormal.set(0, 0, Math.sign(normal.z));
+    }
+    
+    return faceNormal;
   }
 } 

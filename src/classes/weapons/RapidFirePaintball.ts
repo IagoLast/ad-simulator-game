@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Weapon } from '../Weapon';
-import { Projectile } from '../Projectile';
 import { WeaponStats } from '../../types';
+import { ProjectileType } from '../../types';
 
 export class RapidFirePaintball extends Weapon {
   // Colores disponibles para las bolas de pintura
@@ -18,50 +18,41 @@ export class RapidFirePaintball extends Weapon {
     // Definir estadísticas para la ametralladora de paintball
     const stats: WeaponStats = {
       name: "Ametralladora",
+      description: "Arma de fuego rápido con gran capacidad de munición",
+      maxAmmo: 100,
       damage: 5,         // Menos daño por disparo
       fireRate: 8,       // 8 disparos por segundo
-      projectileSpeed: 60,
-      projectileLifespan: 2,
       accuracy: 0.7,     // Menos precisa que la marcadora estándar
-      ammoCapacity: 100, // Mayor capacidad
       reloadTime: 4,     // Mayor tiempo de recarga
+      projectileSpeed: 60,
+      projectileColor: 0xff0000, // Se sobrescribirá con colores aleatorios
+      weight: 7,
       automatic: true    // Disparo automático manteniendo presionado
     };
     
     super(scene, stats);
     
+    // Configurar el tipo de proyectil para este arma
+    this.projectileType = ProjectileType.PAINTBALL;
+    
+    // Configurar opciones personalizadas para este tipo de proyectil
+    this.projectileOptions = {
+      speed: stats.projectileSpeed,
+      damage: stats.damage,
+      lifespan: 2,
+      radius: 0.1 // Proyectiles más pequeños
+    };
+    
     // Crear modelo del arma
     this.createWeaponModel();
   }
 
-  protected createProjectile(position: THREE.Vector3, direction: THREE.Vector3): Projectile {
-    // Seleccionar un color aleatorio
-    const color = this.paintballColors[Math.floor(Math.random() * this.paintballColors.length)];
-    
-    // Menor compensación para la gravedad debido a la mayor velocidad
-    const gravityCompensation = 0.02;
-    const adjustedDirection = direction.clone();
-    adjustedDirection.y += gravityCompensation;
-    adjustedDirection.normalize();
-    
-    // Proyectiles más pequeños
-    const projectile = new Projectile(
-      position,
-      adjustedDirection,
-      this.scene,
-      color,
-      this.stats.projectileSpeed
-    );
-    
-    // Personalizar el proyectil
-    projectile.customRadius = 0.1; // Más pequeño
-    projectile.damage = this.stats.damage;
-    
-    return projectile;
-  }
-
   // Sobrescribir método para efectos específicos al disparar
   protected onShoot(): void {
+    // Seleccionar un color aleatorio para cada disparo
+    const randomColor = this.paintballColors[Math.floor(Math.random() * this.paintballColors.length)];
+    this.projectileOptions.color = randomColor;
+    
     console.log("¡Ráfaga de paintball!");
   }
 

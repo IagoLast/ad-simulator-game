@@ -1,13 +1,27 @@
 import * as THREE from 'three';
 import { Collider, Obstacle, CollisionResult } from './types';
 
+/**
+ * Gravity applied to projectiles in units per second squared
+ */
+export const PROJECTILE_GRAVITY = 9.8;
+
+/**
+ * Physics constants for the game world
+ */
+export const PHYSICS = {
+  GRAVITY: 9.8,
+  PLAYER_JUMP_FORCE: 5,
+  PLAYER_MOVE_SPEED: 10,
+  PLAYER_AIR_MOVE_MULTIPLIER: 0.5
+};
+
 // Physics constants
 export const GRAVITY = 20.0;
 export const JUMP_FORCE = 10.0;
 export const MOVEMENT_SPEED = 60.0;
 export const AIR_CONTROL = 0.3; // Air control factor (0-1)
 export const FRICTION = 0.9; // Ground friction (0-1)
-export const PROJECTILE_GRAVITY = 15.0; // Specific gravity for projectiles (lower than player gravity for gameplay reasons)
 
 /**
  * Check collision between a capsule (player) and box (obstacle)

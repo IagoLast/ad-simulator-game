@@ -1,141 +1,154 @@
 import * as THREE from 'three';
-import { Projectile } from './Projectile';
+import { BaseProjectile } from './projectiles/BaseProjectile';
+import { ProjectileFactory, ProjectileOptions } from './projectiles/ProjectileFactory';
 import { WeaponStats, WeaponState, ProjectileType } from '../types';
 
-export abstract class Weapon {
+export class Weapon {
   protected scene: THREE.Scene;
   protected stats: WeaponStats;
   protected state: WeaponState;
   protected model: THREE.Group | null = null;
-  private projectiles: Projectile[] = [];
-
+  private projectiles: BaseProjectile[] = [];
+  
+  // Add projectile configuration
+  protected projectileType: ProjectileType = ProjectileType.PAINTBALL;
+  protected projectileOptions: ProjectileOptions = {};
+  
   constructor(scene: THREE.Scene, stats: WeaponStats) {
     this.scene = scene;
     this.stats = stats;
     this.state = {
-      currentAmmo: stats.ammoCapacity,
-      reloading: false,
-      cooldown: 0
+      currentAmmo: stats.maxAmmo,
+      isReloading: false,
+      reloadTimeLeft: 0,
+      shootCooldown: 0
+    };
+    
+    // Set default projectile options from stats
+    this.projectileOptions = {
+      speed: stats.projectileSpeed,
+      damage: stats.damage,
+      lifespan: 2, // Default lifespan
+      radius: 0.15, // Default radius
     };
   }
 
+  /**
+   * Updates the weapon state and projectiles
+   * @param delta Time in seconds since last frame
+   */
   public update(delta: number): void {
-    // Actualizar cooldown
-    if (this.state.cooldown > 0) {
-      this.state.cooldown -= delta;
+    // Update cooldown timer
+    if (this.state.shootCooldown > 0) {
+      this.state.shootCooldown -= delta;
     }
-
-    // Actualizar recarga
-    if (this.state.reloading) {
-      this.state.cooldown -= delta;
-      if (this.state.cooldown <= 0) {
-        this.completeReload();
+    
+    // Update reload timer
+    if (this.state.isReloading) {
+      this.state.reloadTimeLeft -= delta;
+      if (this.state.reloadTimeLeft <= 0) {
+        this.state.isReloading = false;
+        this.state.currentAmmo = this.stats.maxAmmo;
       }
     }
-
-    // Actualizar proyectiles
+    
+    // Update projectiles
     this.updateProjectiles(delta);
   }
   
-  // Método separado para actualizar solo los proyectiles
+  /**
+   * Updates all projectiles and removes inactive ones
+   * @param delta Time in seconds since last frame
+   */
   public updateProjectiles(delta: number): void {
-    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+    // Update each projectile and filter out inactive ones
+    const activeProjectiles: BaseProjectile[] = [];
+    
+    for (let i = 0; i < this.projectiles.length; i++) {
       const projectile = this.projectiles[i];
       
       if (projectile.isActive) {
-        // Llamar al método update del proyectil para aplicar la física
         projectile.update(delta);
-      } else {
-        projectile.remove(this.scene);
-        this.projectiles.splice(i, 1);
+        
+        if (projectile.isActive) {
+          activeProjectiles.push(projectile);
+        } else {
+          // Remove from scene when inactive
+          projectile.remove(this.scene);
+        }
       }
     }
+    
+    this.projectiles = activeProjectiles;
   }
-
-  // Método para disparar el arma
-  public shoot(position: THREE.Vector3, direction: THREE.Vector3): Projectile | null {
-    // Verificar si el arma puede disparar
-    if (this.state.cooldown > 0 || this.state.reloading) {
+  
+  /**
+   * Fires the weapon, creating a projectile
+   * @param position Start position for the projectile
+   * @param direction Direction to fire in
+   * @returns The created projectile or null if firing failed
+   */
+  public shoot(position: THREE.Vector3, direction: THREE.Vector3): BaseProjectile | null {
+    // Check if we can shoot
+    if (this.state.shootCooldown > 0 || this.state.isReloading || this.state.currentAmmo <= 0) {
       return null;
     }
-
-    // Verificar munición
-    if (this.stats.ammoCapacity !== -1 && this.state.currentAmmo <= 0) {
-      this.reload();
-      return null;
-    }
-
-    // Calcular cooldown basado en la velocidad de disparo (fireRate)
-    this.state.cooldown = 1 / this.stats.fireRate;
-
-    // Reducir munición si es limitada
-    if (this.stats.ammoCapacity !== -1) {
-      this.state.currentAmmo--;
-    }
-
-    // Aplicar dispersión basada en la precisión
-    const spreadDirection = this.applySpread(direction);
-
-    // Crear y añadir el proyectil
-    const projectile = this.createProjectile(position, spreadDirection);
+    
+    // Update state
+    this.state.shootCooldown = 1 / this.stats.fireRate;
+    this.state.currentAmmo--;
+    
+    // Create a projectile using the factory
+    const projectileOptions = {
+      ...this.projectileOptions,
+      // For cluster projectiles, we need to provide the callback
+      addProjectileCallback: (projectile: BaseProjectile) => {
+        this.projectiles.push(projectile);
+      }
+    };
+    
+    const projectile = ProjectileFactory.createProjectile(
+      this.projectileType,
+      position.clone(),
+      direction.clone(),
+      this.scene,
+      this.stats.projectileColor,
+      projectileOptions
+    );
+    
+    // Add to our projectiles array
     this.projectiles.push(projectile);
     
-    console.log(`Arma ${this.stats.name} disparó. Proyectiles activos: ${this.projectiles.length}`);
-
-    // Implementar otros efectos (sonido, retroceso, etc.)
-    this.onShoot();
-
     return projectile;
   }
 
-  // Método para recargar el arma
-  public reload(): void {
-    if (this.state.reloading || 
-        this.stats.ammoCapacity === -1 || 
-        this.state.currentAmmo === this.stats.ammoCapacity) {
-      return;
-    }
-
-    this.state.reloading = true;
-    this.state.cooldown = this.stats.reloadTime;
-    this.onReloadStart();
-  }
-
-  // Finalizar recarga
-  protected completeReload(): void {
-    this.state.reloading = false;
-    this.state.currentAmmo = this.stats.ammoCapacity;
-    this.onReloadComplete();
-  }
-
-  // Aplicar dispersión basada en la precisión
-  protected applySpread(direction: THREE.Vector3): THREE.Vector3 {
-    const spread = (1 - this.stats.accuracy) * 0.05;
-    const spreadVector = new THREE.Vector3(
-      (Math.random() * 2 - 1) * spread,
-      (Math.random() * 2 - 1) * spread,
-      (Math.random() * 2 - 1) * spread
-    );
-    
-    // Clonar la dirección y añadir la dispersión
-    const newDirection = direction.clone().add(spreadVector);
-    return newDirection.normalize();
-  }
-
-  // Método abstracto para crear el proyectil específico
-  protected abstract createProjectile(position: THREE.Vector3, direction: THREE.Vector3): Projectile;
-
-  // Métodos que se pueden sobrescribir para comportamientos específicos
+  /**
+   * Called when the weapon is fired
+   */
   protected onShoot(): void {
-    // Implementación predeterminada vacía
+    // Default implementation does nothing
   }
-
+  
+  /**
+   * Called when weapon reload starts
+   */
   protected onReloadStart(): void {
-    // Implementación predeterminada vacía
+    // Default implementation does nothing
+  }
+  
+  /**
+   * Called when weapon reload completes
+   */
+  protected onReloadComplete(): void {
+    // Default implementation does nothing
   }
 
-  protected onReloadComplete(): void {
-    // Implementación predeterminada vacía
+  /**
+   * Gets all active projectiles from this weapon
+   * @returns Array of active projectiles
+   */
+  public getProjectiles(): BaseProjectile[] {
+    return this.projectiles;
   }
 
   // Getters
@@ -143,20 +156,16 @@ export abstract class Weapon {
     return this.stats.name;
   }
 
-  public getProjectiles(): Projectile[] {
-    return this.projectiles;
-  }
-
   public getCurrentAmmo(): number {
     return this.state.currentAmmo;
   }
 
   public getMaxAmmo(): number {
-    return this.stats.ammoCapacity;
+    return this.stats.maxAmmo;
   }
 
   public isReloading(): boolean {
-    return this.state.reloading;
+    return this.state.isReloading;
   }
 
   public isAutomatic(): boolean {
@@ -178,5 +187,18 @@ export abstract class Weapon {
 
   public setFireRate(fireRate: number): void {
     this.stats.fireRate = fireRate;
+  }
+
+  /**
+   * Reloads the weapon
+   */
+  public reload(): void {
+    if (this.state.isReloading || this.state.currentAmmo === this.stats.maxAmmo) {
+      return;
+    }
+    
+    this.state.isReloading = true;
+    this.state.reloadTimeLeft = this.stats.reloadTime;
+    console.log(`Reloading weapon: ${this.stats.name}`);
   }
 } 

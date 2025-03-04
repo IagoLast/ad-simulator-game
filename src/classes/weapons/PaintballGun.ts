@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Weapon } from '../Weapon';
-import { Projectile } from '../Projectile';
 import { WeaponStats } from '../../types';
+import { ProjectileType } from '../../types';
 
 export class PaintballGun extends Weapon {
   // Colores disponibles para las bolas de pintura
@@ -18,47 +18,41 @@ export class PaintballGun extends Weapon {
     // Definir estadísticas para la marcadora estándar
     const stats: WeaponStats = {
       name: "Marcadora Estándar",
+      description: "Marcadora básica de paintball con buena precisión",
+      maxAmmo: 50,
       damage: 10,
       fireRate: 2,  // 2 disparos por segundo
-      projectileSpeed: 50,
-      projectileLifespan: 2,
       accuracy: 0.85,
-      ammoCapacity: 50,
       reloadTime: 2,
+      projectileSpeed: 50,
+      projectileColor: 0xff0000, // Este color puede ser sobrescrito
+      weight: 5,
       automatic: false
     };
     
     super(scene, stats);
     
-    // Aquí se podría añadir código para cargar/crear el modelo 3D del arma
+    // Configurar el tipo de proyectil para este arma
+    this.projectileType = ProjectileType.PAINTBALL;
+    
+    // Configurar opciones personalizadas para este tipo de proyectil
+    this.projectileOptions = {
+      speed: stats.projectileSpeed,
+      damage: stats.damage,
+      lifespan: 2,
+      radius: 0.15
+    };
+    
+    // Crear el modelo 3D del arma
     this.createWeaponModel();
-  }
-
-  protected createProjectile(position: THREE.Vector3, direction: THREE.Vector3): Projectile {
-    // Seleccionar un color aleatorio
-    const color = this.paintballColors[Math.floor(Math.random() * this.paintballColors.length)];
-    
-    // Añadir compensación para la gravedad (como en la implementación original)
-    const gravityCompensation = 0.03;
-    const adjustedDirection = direction.clone();
-    adjustedDirection.y += gravityCompensation;
-    adjustedDirection.normalize();
-    
-    // Log para depuración
-    console.log(`Disparando proyectil: Dirección=(${adjustedDirection.x.toFixed(2)}, ${adjustedDirection.y.toFixed(2)}, ${adjustedDirection.z.toFixed(2)}), Velocidad=${this.stats.projectileSpeed}`);
-    
-    // Crear el proyectil
-    return new Projectile(
-      position,
-      adjustedDirection,
-      this.scene,
-      color,
-      this.stats.projectileSpeed
-    );
   }
 
   // Sobrescribir método para efectos específicos al disparar
   protected onShoot(): void {
+    // Seleccionar un color aleatorio para cada disparo
+    const randomColor = this.paintballColors[Math.floor(Math.random() * this.paintballColors.length)];
+    this.projectileOptions.color = randomColor;
+    
     // Aquí se podrían añadir efectos de sonido, animaciones o partículas
     console.log("¡Paintball disparado!");
   }
@@ -92,7 +86,5 @@ export class PaintballGun extends Weapon {
     this.model.add(body);
     this.model.add(barrel);
     this.model.add(tank);
-    
-    // El modelo se añadirá a la escena cuando se equipe el arma
   }
 } 

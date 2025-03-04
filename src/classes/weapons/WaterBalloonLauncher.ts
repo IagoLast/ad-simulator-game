@@ -1,67 +1,41 @@
 import * as THREE from 'three';
 import { Weapon } from '../Weapon';
-import { Projectile } from '../Projectile';
 import { WeaponStats } from '../../types';
+import { ProjectileType } from '../../types';
 
 export class WaterBalloonLauncher extends Weapon {
   constructor(scene: THREE.Scene) {
-    // Definir estadísticas para el lanzador de globos de agua
+    // Definir estadísticas para el lanzagranadas de agua
     const stats: WeaponStats = {
       name: "Lanzador de Globos",
-      damage: 15,
-      fireRate: 1,  // 1 disparo por segundo
-      projectileSpeed: 40,
-      projectileLifespan: 3,
-      accuracy: 0.7,
-      ammoCapacity: 20,
-      reloadTime: 3,
+      description: "Dispara globos de agua que rebotan y generan salpicaduras amplias",
+      maxAmmo: 15,
+      damage: 15,         // Más daño por globo
+      fireRate: 1,        // 1 disparo por segundo
+      accuracy: 0.7,      // Menor precisión
+      reloadTime: 3,      // Recarga moderada
+      projectileSpeed: 40, // Menor velocidad pero mayor radio
+      projectileColor: 0x00aaff, // Azul claro para agua
+      weight: 6,
       automatic: false
     };
     
     super(scene, stats);
     
+    // Configurar el tipo de proyectil para este arma - usamos BounceBall para permitir rebotes
+    this.projectileType = ProjectileType.BOUNCE_BALL;
+    
+    // Configurar opciones personalizadas para este tipo de proyectil
+    this.projectileOptions = {
+      speed: stats.projectileSpeed,
+      damage: stats.damage,
+      lifespan: 3,    // Mayor tiempo de vida para permitir más rebotes
+      radius: 0.2,    // Globos más grandes
+      maxBounces: 2   // Número de rebotes
+    };
+    
     // Crear modelo del arma
     this.createWeaponModel();
-  }
-
-  protected createProjectile(position: THREE.Vector3, direction: THREE.Vector3): Projectile {
-    // Globos de agua siempre azules
-    const color = 0x00aaff;
-    
-    // Mayor compensación para la gravedad debido a que los globos son más pesados
-    const gravityCompensation = 0.06;
-    const adjustedDirection = direction.clone();
-    adjustedDirection.y += gravityCompensation;
-    adjustedDirection.normalize();
-    
-    // Crear el proyectil (un globo de agua es más grande)
-    const projectile = new Projectile(
-      position,
-      adjustedDirection,
-      this.scene,
-      color,
-      this.stats.projectileSpeed
-    );
-    
-    // Personalizar el proyectil para que sea más grande
-    this.customizeProjectile(projectile);
-    
-    return projectile;
-  }
-
-  // Personalizar el proyectil para que parezca un globo de agua
-  private customizeProjectile(projectile: Projectile): void {
-    // Hacer el proyectil más grande
-    projectile.mesh.scale.set(1.5, 1.5, 1.5);
-    
-    // Aumentar el radio del collider
-    projectile.customRadius = 0.25;
-    
-    // Daño específico
-    projectile.damage = this.stats.damage;
-    
-    // Duración específica
-    projectile.lifespan = this.stats.projectileLifespan;
   }
 
   // Sobrescribir método para efectos específicos al disparar
@@ -73,31 +47,28 @@ export class WaterBalloonLauncher extends Weapon {
   private createWeaponModel(): void {
     this.model = new THREE.Group();
     
-    // Crear el cuerpo del lanzador
-    const bodyGeometry = new THREE.BoxGeometry(0.15, 0.15, 0.4);
-    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x22aa22 });
+    // Cuerpo del lanzador - más corto y ancho
+    const bodyGeometry = new THREE.CylinderGeometry(0.08, 0.1, 0.5, 12);
+    const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x0088cc });
     const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    body.rotation.z = Math.PI / 2;
     
-    // Crear el cañón (más ancho para los globos)
-    const barrelGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8);
-    const barrelMaterial = new THREE.MeshLambertMaterial({ color: 0x44cc44 });
-    const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.z = -0.3;
+    // Mango
+    const handleGeometry = new THREE.CylinderGeometry(0.03, 0.04, 0.2, 8);
+    const handleMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+    const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+    handle.position.y = -0.15;
+    handle.position.x = -0.1;
     
-    // Crear el depósito de agua
-    const tankGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const tankMaterial = new THREE.MeshLambertMaterial({ 
-      color: 0x00aaff,
-      transparent: true,
-      opacity: 0.7
-    });
-    const tank = new THREE.Mesh(tankGeometry, tankMaterial);
-    tank.position.y = 0.15;
+    // Decoraciones
+    const ringGeometry = new THREE.TorusGeometry(0.08, 0.02, 8, 16);
+    const ringMaterial = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.rotation.y = Math.PI / 2;
+    ring.position.x = 0.25;
     
-    // Agregar todas las partes al modelo
     this.model.add(body);
-    this.model.add(barrel);
-    this.model.add(tank);
+    this.model.add(handle);
+    this.model.add(ring);
   }
 } 
