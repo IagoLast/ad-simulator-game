@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Paintball Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #health {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            pointer-events: none;
+        }
+        #crosshair::before,
+        #crosshair::after {
+            content: "";
+            position: absolute;
+            background-color: white;
+        }
+        #crosshair::before {
+            top: 9px;
+            left: 0;
+            width: 20px;
+            height: 2px;
+        }
+        #crosshair::after {
+            top: 0;
+            left: 9px;
+            width: 2px;
+            height: 20px;
+        }
+        #ammo {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="health">Health: 100%</div>
+    <div id="ammo">Ammo: ∞</div>
+    <div id="crosshair"></div>
+    <div id="instructions">
+        <h1>3D Paintball Game</h1>
+        <p>Use WASD to move, mouse to look around, and SPACEBAR to jump</p>
+        <p>Click to start, left click to shoot</p>
+    </div>
+    <script type="module" src="./src/game.ts"></script>
+</body>
+</html> 
