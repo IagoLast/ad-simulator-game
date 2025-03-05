@@ -968,22 +968,99 @@ export class Game {
     let elapsedTime = 0;
     const timeStep = 0.016; // ~60fps
     
+    // Store previous position for more accurate collision detection
+    let previousPosition = position.clone();
+    
     // Animation function for projectile
     const animateProjectile = () => {
       // Update elapsed time
       elapsedTime += timeStep;
       
+      // Store previous position for collision detection
+      previousPosition.copy(projectile.position);
+      
       // Apply gravity to velocity
       velocity.y -= gravity * timeStep;
       
-      // Move projectile
-      projectile.position.add(velocity.clone().multiplyScalar(timeStep));
+      // Calculate new position
+      const newPosition = projectile.position.clone().add(velocity.clone().multiplyScalar(timeStep));
       
-      // Prevent projectiles from going below ground
-      if (projectile.position.y < 0.1) {
-        projectile.position.y = 0.1;
-        velocity.y = 0; // Stop vertical movement
+      // Create a movement vector for raycasting
+      const movementVector = newPosition.clone().sub(previousPosition).normalize();
+      const movementDistance = previousPosition.distanceTo(newPosition);
+      
+      // Check for collisions with walls and other objects
+      // Use a raycaster that goes from previous position to new position
+      const raycaster = new THREE.Raycaster();
+      raycaster.set(previousPosition, movementVector);
+      raycaster.far = movementDistance + 0.2; // Add a small buffer for detection
+      
+      // Check collisions with walls and any other collidable objects
+      // We'll combine walls with any billboard objects if they exist
+      const collidableObjects = [...this.walls];
+      
+      // Add collision check for ground
+      const groundRaycaster = new THREE.Raycaster();
+      groundRaycaster.set(
+        projectile.position.clone(), 
+        new THREE.Vector3(0, -1, 0) // Straight down
+      );
+      const groundDistance = projectile.position.y; // Distance to ground
+      
+      // Perform the collision check
+      const intersects = raycaster.intersectObjects(collidableObjects);
+      const groundIntersects = groundDistance < 0.2; // Close to ground
+      
+      // Check if we hit something
+      if (intersects.length > 0 && intersects[0].distance < movementDistance + 0.2) {
+        // We hit a wall or object
+        // Get the intersection point and surface normal
+        const hitPoint = intersects[0].point;
+        const hitNormal = intersects[0].face ? intersects[0].face.normal.clone() : movementVector.clone().negate();
+        
+        // Create impact effect at hit location
+        this.createImpactEffect(hitPoint, hitNormal, color);
+        
+        // Play impact sound
+        this.sound.playImpactSound(
+          { x: hitPoint.x, y: hitPoint.y, z: hitPoint.z },
+          { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }
+        );
+        
+        // Remove projectile
+        this.scene.remove(projectile);
+        return;
       }
+      
+      // Check for ground collision
+      if (groundIntersects || newPosition.y <= 0.1) {
+        // We hit the ground
+        const groundHitPoint = new THREE.Vector3(
+          newPosition.x,
+          0.01, // Slightly above ground to prevent z-fighting
+          newPosition.z
+        );
+        
+        // Create impact effect on ground
+        this.createImpactEffect(
+          groundHitPoint, 
+          new THREE.Vector3(0, 1, 0), // Ground normal points up
+          color
+        );
+        
+        // Play impact sound
+        this.sound.playImpactSound(
+          { x: groundHitPoint.x, y: groundHitPoint.y, z: groundHitPoint.z },
+          { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }
+        );
+        
+        // Remove projectile
+        this.scene.remove(projectile);
+        return;
+      }
+      
+      // If no collision detected, update the position
+      projectile.position.copy(newPosition);
       
       // Check if projectile has traveled too far
       const distanceTraveled = projectile.position.distanceTo(startPosition);
@@ -991,33 +1068,6 @@ export class Game {
         // Remove projectile
         this.scene.remove(projectile);
         return;
-      }
-      
-      // Check wall collisions
-      const raycaster = new THREE.Raycaster();
-      raycaster.set(
-        projectile.position.clone().sub(normalizedDirection.clone().multiplyScalar(0.1)),
-        normalizedDirection
-      );
-      const intersects = raycaster.intersectObjects(this.walls);
-      
-      if (intersects.length > 0 && intersects[0].distance < 0.2) {
-        // Hit a wall, create impact effect
-        this.createImpactEffect(projectile.position, normalizedDirection, color);
-        
-        // Remove projectile
-        this.scene.remove(projectile);
-        return;
-      }
-      
-      // Check player collisions (only visual - server handles actual hits)
-      
-      // When impact is detected, play impact sound
-      if (intersects.length > 0 && intersects[0].distance < 0.2) {
-        this.sound.playImpactSound(
-          { x: projectile.position.x, y: projectile.position.y, z: projectile.position.z },
-          { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }
-        );
       }
       
       // Continue animation
@@ -1032,43 +1082,199 @@ export class Game {
    * Create impact effect when projectile hits something
    */
   private createImpactEffect(position: THREE.Vector3, direction: THREE.Vector3, color: number): void {
-    // Create splash effect
-    const splash = new THREE.Group();
+    // Create explosion effect
+    this.createExplosionEffect(position, color);
     
-    // Create multiple small spheres for splash
-    for (let i = 0; i < 8; i++) {
-      const splat = new THREE.Mesh(
-        new THREE.SphereGeometry(0.03, 4, 4),
+    // Create paint stain on the surface
+    this.createPaintStain(position, direction, color);
+  }
+  
+  /**
+   * Create an explosion visual effect when a projectile impacts
+   * @param position - Position of the explosion
+   * @param color - Color of the explosion (based on team color)
+   */
+  private createExplosionEffect(position: THREE.Vector3, color: number): void {
+    // Create explosion particle group
+    const explosion = new THREE.Group();
+    
+    // Number of particles in the explosion
+    const particleCount = 15;
+    
+    // Create multiple particles for explosion effect
+    for (let i = 0; i < particleCount; i++) {
+      // Create particle with random size
+      const particleSize = 0.02 + Math.random() * 0.08;
+      const particle = new THREE.Mesh(
+        new THREE.SphereGeometry(particleSize, 6, 6),
         new THREE.MeshStandardMaterial({
           color: color,
           emissive: color,
-          emissiveIntensity: 0.5
+          emissiveIntensity: 0.7,
+          transparent: true,
+          opacity: 0.9
         })
       );
       
-      // Random offset from center
-      const randomDirection = new THREE.Vector3(
-        Math.random() * 2 - 1,
-        Math.random() * 2 - 1,
-        Math.random() * 2 - 1
-      ).normalize();
+      // Set initial position at impact point
+      particle.position.copy(position);
       
-      // Bias direction away from surface
-      randomDirection.add(direction.clone().negate()).normalize();
+      // Add particle to explosion group
+      explosion.add(particle);
       
-      // Set position with small random offset
-      splat.position.copy(position).add(randomDirection.multiplyScalar(0.05));
+      // Calculate random velocity for each particle
+      const velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 4,  // Random X direction
+        Math.random() * 3,          // Mostly upward
+        (Math.random() - 0.5) * 4   // Random Z direction
+      );
       
-      splash.add(splat);
+      // Animate each particle
+      const animateParticle = () => {
+        // Move particle according to velocity
+        particle.position.add(velocity.clone().multiplyScalar(0.016)); // 60fps approx
+        
+        // Apply gravity
+        velocity.y -= 0.1;
+        
+        // Shrink particle over time (fade effect)
+        particle.scale.multiplyScalar(0.95);
+        
+        // Reduce opacity
+        const material = particle.material as THREE.MeshStandardMaterial;
+        material.opacity *= 0.97;
+        
+        // Continue animation until particle is very small or transparent
+        if (particle.scale.x > 0.1 && material.opacity > 0.1) {
+          requestAnimationFrame(animateParticle);
+        } else {
+          // Remove this particle from the explosion group
+          explosion.remove(particle);
+          
+          // If all particles are removed, remove the explosion group
+          if (explosion.children.length === 0) {
+            this.scene.remove(explosion);
+          }
+        }
+      };
+      
+      // Start particle animation
+      animateParticle();
     }
     
-    // Add to scene
-    this.scene.add(splash);
+    // Add explosion to scene
+    this.scene.add(explosion);
+  }
+  
+  /**
+   * Create a paint stain effect on surfaces
+   * @param position - Impact position
+   * @param direction - Impact direction (normal to the surface)
+   * @param color - Color of the paint stain
+   */
+  private createPaintStain(position: THREE.Vector3, direction: THREE.Vector3, color: number): void {
+    // Create a flat paint splatter facing the surface
+    const paintGroup = new THREE.Group();
     
-    // Remove after short duration
+    // Get the normal vector of the surface (opposite of impact direction)
+    const normal = direction.clone().negate().normalize();
+    
+    // Create main paint splat
+    const mainSplat = new THREE.Mesh(
+      new THREE.CircleGeometry(0.2, 16),
+      new THREE.MeshStandardMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.3,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide // Visible from both sides
+      })
+    );
+    
+    // Position slightly off the surface to prevent z-fighting
+    mainSplat.position.copy(position).addScaledVector(normal, 0.01);
+    
+    // Orient the splat to face the surface (align with normal)
+    mainSplat.lookAt(mainSplat.position.clone().add(normal));
+    
+    // Add to paint group
+    paintGroup.add(mainSplat);
+    
+    // Add smaller drips and splatters around the main splat
+    for (let i = 0; i < 6; i++) {
+      // Create random direction in hemisphere facing away from wall
+      const randomOffset = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2,
+        (Math.random() - 0.5) * 2
+      );
+      
+      // Ensure the direction tends away from the wall
+      randomOffset.add(normal.clone().multiplyScalar(0.5)).normalize();
+      
+      // Random size for drip/splatter
+      const dripSize = 0.03 + Math.random() * 0.1;
+      
+      // Create drip mesh
+      const drip = new THREE.Mesh(
+        new THREE.CircleGeometry(dripSize, 8),
+        new THREE.MeshStandardMaterial({
+          color: color,
+          emissive: color,
+          emissiveIntensity: 0.3,
+          transparent: true,
+          opacity: 0.85,
+          side: THREE.DoubleSide
+        })
+      );
+      
+      // Position drip near main splat
+      const dripDistance = 0.1 + Math.random() * 0.3;
+      drip.position.copy(position)
+          .add(new THREE.Vector3(
+            (Math.random() - 0.5) * dripDistance,
+            (Math.random() - 0.5) * dripDistance,
+            (Math.random() - 0.5) * dripDistance
+          ))
+          .addScaledVector(normal, 0.01); // Slight offset from surface
+      
+      // Orient to face the surface
+      drip.lookAt(drip.position.clone().add(normal));
+      
+      // Add to paint group
+      paintGroup.add(drip);
+    }
+    
+    // Add paint stain to scene
+    this.scene.add(paintGroup);
+    
+    // Keep stain for a longer duration (but not permanently to avoid memory buildup)
+    // In a full implementation, you might want to limit the number of stains,
+    // and remove the oldest when a new one is created after reaching a max count
     setTimeout(() => {
-      this.scene.remove(splash);
-    }, 1000);
+      // Fade out the paint stain gradually
+      const fadeInterval = setInterval(() => {
+        let allRemoved = true;
+        
+        // Reduce opacity of all paint elements
+        paintGroup.children.forEach(child => {
+          const material = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+          material.opacity *= 0.95;
+          
+          // Keep track if any are still visible
+          if (material.opacity > 0.1) {
+            allRemoved = false;
+          }
+        });
+        
+        // If all elements have faded out, remove the paint group
+        if (allRemoved) {
+          clearInterval(fadeInterval);
+          this.scene.remove(paintGroup);
+        }
+      }, 100);
+    }, 20000); // Keep stain visible for 20 seconds before starting fade
   }
   
   /**
