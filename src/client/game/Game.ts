@@ -60,7 +60,10 @@ export class Game {
     this.mapRenderer = new MapRenderer(this.scene);
     
     // Initialize socket connection using the current path as namespace
-    this.socket = io(namespace);
+    this.socket = io(window.location.hostname, {
+      path: namespace,
+      transports: ['websocket'],
+    });
     
     // Initialize players collection
     this.players = new Map();
