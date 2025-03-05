@@ -37,7 +37,7 @@ export class BounceBallProjectile extends BaseProjectile {
     speed: number = 45,
     damage: number = 7,
     lifespan: number = 3,
-    radius: number = 0.18,
+    radius: number = 2,
     maxBounces: number = 3
   ) {
     super(position, direction, scene, ProjectileType.BOUNCE_BALL, color, speed, damage, lifespan, radius);

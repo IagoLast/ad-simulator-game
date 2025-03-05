@@ -9,14 +9,14 @@ export class WaterBalloonLauncher extends Weapon {
     const stats: WeaponStats = {
       name: "Lanzador de Globos",
       description: "Dispara globos de agua que rebotan y generan salpicaduras amplias",
-      maxAmmo: 15,
-      damage: 15,         // Más daño por globo
-      fireRate: 1,        // 1 disparo por segundo
+      maxAmmo: 5,
+      damage: 30,         // Más daño por globo
+      fireRate: 0.5,  
       accuracy: 0.7,      // Menor precisión
       reloadTime: 3,      // Recarga moderada
       projectileSpeed: 40, // Menor velocidad pero mayor radio
       projectileColor: 0x00aaff, // Azul claro para agua
-      weight: 6,
+      weight: 10,
       automatic: false
     };
     
@@ -30,7 +30,7 @@ export class WaterBalloonLauncher extends Weapon {
       speed: stats.projectileSpeed,
       damage: stats.damage,
       lifespan: 3,    // Mayor tiempo de vida para permitir más rebotes
-      radius: 0.2,    // Globos más grandes
+      radius: 0.4,    // Globos más grandes
       maxBounces: 2   // Número de rebotes
     };
     
