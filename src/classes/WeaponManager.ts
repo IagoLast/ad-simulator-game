@@ -129,6 +129,14 @@ export class WeaponManager {
     return this.weapons[this.currentWeaponIndex];
   }
 
+  /**
+   * Gets the index of the current weapon
+   * @returns The index of the currently selected weapon
+   */
+  public getCurrentWeaponIndex(): number {
+    return this.currentWeaponIndex;
+  }
+
   public setWeapon(index: number): void {
     if (index >= 0 && index < this.weapons.length) {
       this.currentWeaponIndex = index;

@@ -68,11 +68,28 @@ function initScene(): void {
   createLighting();
 }
 
+/**
+ * Updates the weapon selection UI
+ * @param selectedIndex Index of the selected weapon
+ */
+function updateWeaponSelection(selectedIndex: number): void {
+  // Update the UI to show the selected weapon
+  const weaponItems = document.querySelectorAll('.weapon-item');
+  weaponItems.forEach((item, index) => {
+    if (index === selectedIndex) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
+}
+
 // Setup event listeners
 function setupEventListeners(): void {
   const instructions = document.getElementById('instructions');
   const crosshair = document.getElementById('crosshair');
   const waveCountdown = document.getElementById('wave-countdown');
+  const weaponSelector = document.getElementById('weapon-selector');
   
   if (!instructions || !crosshair) return;
 
@@ -86,6 +103,9 @@ function setupEventListeners(): void {
     if (waveCountdown) {
       waveCountdown.style.display = 'block';
     }
+    if (weaponSelector) {
+      weaponSelector.style.display = 'flex';
+    }
   });
 
   controls.addEventListener('unlock', () => {
@@ -94,6 +114,19 @@ function setupEventListeners(): void {
     if (waveCountdown) {
       waveCountdown.style.display = 'none';
     }
+  });
+
+  // Setup weapon selector click events
+  const weaponItems = document.querySelectorAll('.weapon-item');
+  weaponItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      if (!controls.isLocked) return; // Only work when game is active
+      
+      const index = parseInt(item.getAttribute('data-index') || '0', 10);
+      gameState.currentWeaponIndex = index;
+      weaponManager.setWeapon(index);
+      updateWeaponSelection(index);
+    });
   });
 
   // Movement controls
@@ -117,25 +150,36 @@ function setupEventListeners(): void {
           gameState.canJump = false;
         }
         break;
-      // Añadir teclas para cambiar de arma
-      case 'Digit1': // Tecla 1
-      case 'Digit2': // Tecla 2
-      case 'Digit3': // Tecla 3
+      case 'Digit1':
+      case 'Digit2':
+      case 'Digit3':
         // Cambiar al arma correspondiente (0-indexed)
         const weaponIndex = parseInt(event.code.slice(-1)) - 1;
         if (weaponIndex >= 0 && weaponIndex < 3) {
           gameState.currentWeaponIndex = weaponIndex;
           weaponManager.setWeapon(weaponIndex);
+          updateWeaponSelection(weaponIndex);
         }
         break;
       case 'KeyQ': // Arma anterior
         weaponManager.previousWeapon();
+        updateWeaponSelection(weaponManager.getCurrentWeaponIndex());
         break;
       case 'KeyE': // Arma siguiente
         weaponManager.nextWeapon();
+        updateWeaponSelection(weaponManager.getCurrentWeaponIndex());
         break;
       case 'KeyR': // Recargar
         weaponManager.reload();
+        break;
+      case 'KeyB':
+        // Generar un bot con proyectiles rebotantes
+        const playerPos = controls.getObject().position.clone();
+        // Colocar el bot a 10 unidades frente al jugador
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        const botPosition = playerPos.clone().add(forward.multiplyScalar(10));
+        botPosition.y = 0; // En el suelo
+        botManager.spawnBounceBot(botPosition);
         break;
     }
   });
@@ -390,6 +434,12 @@ function init(): void {
   const waveCountdown = document.getElementById('wave-countdown');
   if (waveCountdown) {
     waveCountdown.style.display = 'none';
+  }
+  
+  // Hide weapon selector initially
+  const weaponSelector = document.getElementById('weapon-selector');
+  if (weaponSelector) {
+    weaponSelector.style.display = 'none';
   }
   
   // Initialize scene

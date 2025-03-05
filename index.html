@@ -84,6 +84,57 @@
             padding: 10px;
             border-radius: 5px;
         }
+        /* Estilos para el selector de armas */
+        #weapon-selector {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+        }
+        .weapon-item {
+            background-color: #333;
+            width: 64px;
+            height: 64px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            background-color: rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .weapon-item img {
+            max-width: 80%;
+            max-height: 80%;
+            object-fit: contain;
+        }
+        .weapon-item.active {
+            border-color: #ffcc00;
+            box-shadow: 0 0 10px #ffcc00;
+        }
+        .weapon-key {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background-color: #ffcc00;
+            color: black;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -95,7 +146,25 @@
         <h1>3D Paintball Game</h1>
         <p>Use WASD to move, mouse to look around, and SPACEBAR to jump</p>
         <p>Click to start, left click to shoot</p>
+        <p>Use number keys (1-3) or click on the weapon icons to change weapons</p>
     </div>
+    
+    <!-- Selector de armas -->
+    <div id="weapon-selector">
+        <div class="weapon-item active" data-index="0">
+            <img src="./src/assets/weapons/gun.png" alt="Paintball Gun">
+            <div class="weapon-key">1</div>
+        </div>
+        <div class="weapon-item" data-index="1">
+            <img src="./src/assets/weapons/grenade.png" alt="Water Balloon Launcher">
+            <div class="weapon-key">2</div>
+        </div>
+        <div class="weapon-item" data-index="2">
+            <img src="./src/assets/weapons/rapid_fire.png" alt="Rapid Fire Paintball">
+            <div class="weapon-key">3</div>
+        </div>
+    </div>
+    
     <script type="module" src="./src/game.ts"></script>
 </body>
 </html> 
