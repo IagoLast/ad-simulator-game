@@ -5,6 +5,21 @@ import * as THREE from 'three';
  * When the player takes the flag to the maze exit, they win
  */
 export class Flag {
+  /** Static properties to control flag appearance */
+  private static readonly BALLOON_RADIUS: number = 1;
+  private static readonly BALLOON_SEGMENTS: number = 16;
+  private static readonly BALLOON_COLOR: number = 0xff0000; // Red
+  
+  private static readonly STRING_THICKNESS: number = 0.05;
+  private static readonly STRING_LENGTH: number = 5;
+  private static readonly STRING_SEGMENTS: number = 8;
+  private static readonly STRING_COLOR: number = 0xffffff; // White
+  
+  private static readonly BALLOON_HEIGHT: number = 3; // Y position of balloon
+  private static readonly STRING_HEIGHT: number = -1; // Y position of string
+  
+  private static readonly COLLIDER_RADIUS: number = 1.5; // Interaction radius
+  
   /** The 3D mesh representing the flag */
   public mesh: THREE.Group;
   
@@ -17,23 +32,41 @@ export class Flag {
     radius: number;
   };
   
+  /** Reference to the scene for adding/removing the flag */
+  private scene: THREE.Scene;
+  
   constructor(scene: THREE.Scene, position: THREE.Vector3) {
+    this.scene = scene;
+    
     // Create the flag mesh (balloon-like)
     this.mesh = new THREE.Group();
     
     // Create balloon part
-    const balloonGeometry = new THREE.SphereGeometry(1, 16, 16);
-    const balloonMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 }); // Red balloon
+    const balloonGeometry = new THREE.SphereGeometry(
+      Flag.BALLOON_RADIUS, 
+      Flag.BALLOON_SEGMENTS, 
+      Flag.BALLOON_SEGMENTS
+    );
+    const balloonMaterial = new THREE.MeshLambertMaterial({ 
+      color: Flag.BALLOON_COLOR 
+    });
     const balloon = new THREE.Mesh(balloonGeometry, balloonMaterial);
     
     // Create string part
-    const stringGeometry = new THREE.CylinderGeometry(0.05, 0.05, 2, 8);
-    const stringMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const stringGeometry = new THREE.CylinderGeometry(
+      Flag.STRING_THICKNESS, 
+      Flag.STRING_THICKNESS, 
+      Flag.STRING_LENGTH, 
+      Flag.STRING_SEGMENTS
+    );
+    const stringMaterial = new THREE.MeshBasicMaterial({ 
+      color: Flag.STRING_COLOR 
+    });
     const string = new THREE.Mesh(stringGeometry, stringMaterial);
     
     // Position the parts
-    balloon.position.y = 1;
-    string.position.y = -0.5;
+    balloon.position.y = Flag.BALLOON_HEIGHT;
+    string.position.y = Flag.STRING_HEIGHT;
     
     // Add parts to the group
     this.mesh.add(balloon);
@@ -45,7 +78,7 @@ export class Flag {
     // Set up the collider
     this.collider = {
       position: position,
-      radius: 1.5 // Slightly larger than the balloon for easier interaction
+      radius: Flag.COLLIDER_RADIUS
     };
     
     // Add mesh to scene

@@ -511,28 +511,101 @@ function findFlagSpawnPosition(): THREE.Vector3 {
     // Get spawn position for player
     const playerSpawnPos = obstacleManager.findSpawnPosition();
     
-    // Find a position that's at least 30 units away from player spawn
-    const attempts = 20;
+    // Get all obstacles to check for collisions
+    const obstacles = obstacleManager.getObstacles();
+    
+    // Try multiple positions to find one that doesn't collide with obstacles
+    const attempts = 30; // Increase number of attempts to find a suitable position
     for (let i = 0; i < attempts; i++) {
       const testPos = obstacleManager.findSpawnPosition();
       
-      // If this position is far enough from player spawn, use it
+      // If this position is far enough from player spawn
       if (testPos.distanceTo(playerSpawnPos) > 30) {
-        // Raise it a bit off the ground
-        testPos.y = 2; 
-        return testPos;
+        // Check if the position collides with any obstacle
+        const collides = checkPositionCollision(testPos, obstacles);
+        
+        if (!collides) {
+          // Found a good position with no collisions
+          console.log(`Found non-colliding flag position on attempt ${i+1}`);
+          // Raise it a bit off the ground
+          testPos.y = 2; 
+          return testPos;
+        }
+      }
+    }
+    
+    console.warn("Could not find collision-free position for flag after multiple attempts");
+  }
+  
+  // Fallback to a hardcoded position if we couldn't find a good one
+  // Try several random positions until we find one that doesn't collide
+  const obstacles = obstacleManager ? obstacleManager.getObstacles() : [];
+  
+  for (let i = 0; i < 20; i++) {
+    const randomPosition = new THREE.Vector3(
+      (Math.random() - 0.5) * 80, 
+      2, 
+      (Math.random() - 0.5) * 80
+    );
+    
+    // Check if this random position collides with obstacles
+    if (!checkPositionCollision(randomPosition, obstacles)) {
+      console.log(`Found non-colliding random flag position on attempt ${i+1}`);
+      return randomPosition;
+    }
+  }
+  
+  // Last resort - fixed position far from origin
+  console.warn("Using last resort flag position");
+  return new THREE.Vector3(50, 2, 50);
+}
+
+/**
+ * Check if a position collides with any obstacles
+ * @param position The position to check
+ * @param obstacles Array of obstacles to check against
+ * @returns True if there's a collision, false otherwise
+ */
+function checkPositionCollision(position: THREE.Vector3, obstacles: any[]): boolean {
+  // Flag collider size (using the static values from Flag class)
+  const flagColliderRadius = 1.5; // Same as Flag.COLLIDER_RADIUS
+  
+  // Check against each obstacle
+  for (const obstacle of obstacles) {
+    // For box obstacles
+    if (obstacle.collider && obstacle.collider.type === 'box') {
+      const obstaclePos = obstacle.collider.position;
+      const obstacleSize = obstacle.collider.size;
+      
+      // Create a box representing the obstacle bounds
+      const halfSize = obstacleSize.clone().multiplyScalar(0.5);
+      const min = obstaclePos.clone().sub(halfSize);
+      const max = obstaclePos.clone().add(halfSize);
+      
+      // Simple check if the flag's bounding sphere intersects with the obstacle's box
+      // For each axis, check if the flag is too close to the box
+      if (
+        position.x + flagColliderRadius >= min.x && position.x - flagColliderRadius <= max.x &&
+        position.y + flagColliderRadius >= min.y && position.y - flagColliderRadius <= max.y &&
+        position.z + flagColliderRadius >= min.z && position.z - flagColliderRadius <= max.z
+      ) {
+        return true; // Collision detected
+      }
+    }
+    // For sphere obstacles
+    else if (obstacle.collider && obstacle.collider.type === 'sphere' && obstacle.collider.radius) {
+      const obstaclePos = obstacle.collider.position;
+      const obstacleRadius = obstacle.collider.radius;
+      
+      // Check if the distance between centers is less than the sum of the radii
+      const distance = position.distanceTo(obstaclePos);
+      if (distance < (flagColliderRadius + obstacleRadius)) {
+        return true; // Collision detected
       }
     }
   }
   
-  // Fallback to a hardcoded position if we couldn't find a good one
-  const position = new THREE.Vector3(
-    (Math.random() - 0.5) * 80, 
-    2, 
-    (Math.random() - 0.5) * 80
-  );
-  
-  return position;
+  return false; // No collision
 }
 
 // Handle flag interaction and win condition
