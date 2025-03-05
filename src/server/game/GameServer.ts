@@ -1,6 +1,74 @@
 import { Server, Socket } from 'socket.io';
-import { EntityType, Exit, GameState, MapData, PlayerMovement, PlayerState, SocketEvents } from '../../shared/types';
+import { EntityType, Exit, GameState, HitEvent, MapData, PlayerMovement, PlayerState, ShootEvent, SocketEvents, WeaponType } from '../../shared/types';
 import { MapGenerator } from './MapGenerator';
+
+/**
+ * Projectile class for server-side physics simulation
+ */
+class Projectile {
+  public id: string;
+  public shooterId: string;
+  public teamId: number;
+  public position: { x: number, y: number, z: number };
+  public velocity: { x: number, y: number, z: number };
+  public speed: number;
+  public damage: number;
+  public timestamp: number;
+  private gravity: number = 9.8; // Gravity acceleration (m/s²)
+  
+  constructor(
+    id: string,
+    shooterId: string,
+    teamId: number,
+    position: { x: number, y: number, z: number },
+    direction: { x: number, y: number, z: number },
+    speed: number,
+    damage: number
+  ) {
+    this.id = id;
+    this.shooterId = shooterId;
+    this.teamId = teamId;
+    this.position = { ...position };
+    
+    // Calculate velocity from direction and speed
+    const length = Math.sqrt(direction.x ** 2 + direction.y ** 2 + direction.z ** 2);
+    const normalizedDirection = {
+      x: direction.x / length,
+      y: direction.y / length,
+      z: direction.z / length
+    };
+    
+    this.velocity = {
+      x: normalizedDirection.x * speed,
+      y: normalizedDirection.y * speed,
+      z: normalizedDirection.z * speed
+    };
+    
+    this.speed = speed;
+    this.damage = damage;
+    this.timestamp = Date.now();
+  }
+  
+  /**
+   * Update projectile position based on time passed
+   * @param deltaTime Time passed in seconds
+   */
+  update(deltaTime: number): void {
+    // Apply gravity to Y velocity
+    this.velocity.y -= this.gravity * deltaTime;
+    
+    // Update position based on velocity
+    this.position.x += this.velocity.x * deltaTime;
+    this.position.y += this.velocity.y * deltaTime;
+    this.position.z += this.velocity.z * deltaTime;
+    
+    // Prevent projectiles from going below ground
+    if (this.position.y < 0.1) {
+      this.position.y = 0.1;
+      this.velocity.y = 0; // Stop vertical movement
+    }
+  }
+}
 
 /**
  * GameServer handles all the game logic and player connections
@@ -18,6 +86,10 @@ export class GameServer {
   private gameOver: boolean = false;
   private winningTeam: number | null = null;
   private restartTimeout: NodeJS.Timeout | null = null;
+  private projectiles: Projectile[] = [];
+  private lastProjectileId: number = 0;
+  private respawnTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private lastUpdate: number = Date.now();
   
   /**
    * Create a new GameServer instance
@@ -47,6 +119,9 @@ export class GameServer {
     
     // Find exit positions for spawning
     this.findTeamExits();
+    
+    // Start physics update loop
+    setInterval(this.updatePhysics.bind(this), 16); // ~60 updates per second
   }
 
   /**
@@ -69,6 +144,197 @@ export class GameServer {
     
     // Log exit positions
     console.log('Team exits found:', this.teamExits);
+  }
+
+  /**
+   * Update physics simulation (projectiles, collisions, etc.)
+   */
+  private updatePhysics(): void {
+    const now = Date.now();
+    const deltaTime = (now - this.lastUpdate) / 1000; // Convert to seconds
+    this.lastUpdate = now;
+    
+    // Skip large time jumps
+    if (deltaTime > 0.1) {
+      return;
+    }
+    
+    // Update projectiles
+    this.updateProjectiles(deltaTime);
+  }
+  
+  /**
+   * Update all projectiles and check for collisions
+   */
+  private updateProjectiles(deltaTime: number): void {
+    const projectilesToRemove: string[] = [];
+    
+    // Maximum projectile lifetime in milliseconds
+    const maxLifetime = 5000;
+    const now = Date.now();
+    
+    // Update each projectile
+    for (const projectile of this.projectiles) {
+      // Check if projectile is too old
+      if (now - projectile.timestamp > maxLifetime) {
+        projectilesToRemove.push(projectile.id);
+        continue;
+      }
+      
+      // Update position
+      projectile.update(deltaTime);
+      
+      // Check for collisions with walls (simple check against map bounds)
+      const mapWidth = this.mapData.width;
+      const mapHeight = this.mapData.height;
+      
+      if (
+        projectile.position.x < -mapWidth / 2 || projectile.position.x > mapWidth / 2 ||
+        projectile.position.z < -mapHeight / 2 || projectile.position.z > mapHeight / 2 ||
+        projectile.position.y < 0 || projectile.position.y > 10
+      ) {
+        projectilesToRemove.push(projectile.id);
+        continue;
+      }
+      
+      // Check for collisions with players
+      for (const [playerId, playerState] of this.players.entries()) {
+        // Skip if player is the shooter or from the same team, or if player is dead
+        if (
+          playerId === projectile.shooterId || 
+          playerState.teamId === projectile.teamId ||
+          playerState.isDead
+        ) {
+          continue;
+        }
+        
+        // Simple distance-based collision check
+        const dx = projectile.position.x - playerState.position.x;
+        const dy = projectile.position.y - playerState.position.y;
+        const dz = projectile.position.z - playerState.position.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        // If collision detected - increased collision radius for better hit detection
+        if (distance < 1.5) { // Increased from 1.0 to 1.5 for better hit detection
+          // Handle hit
+          this.handlePlayerHit(projectile, playerId);
+          
+          // Remove projectile
+          projectilesToRemove.push(projectile.id);
+          break;
+        }
+      }
+    }
+    
+    // Remove destroyed projectiles
+    if (projectilesToRemove.length > 0) {
+      this.projectiles = this.projectiles.filter(p => !projectilesToRemove.includes(p.id));
+    }
+  }
+  
+  /**
+   * Handle a player being hit by a projectile
+   */
+  private handlePlayerHit(projectile: Projectile, targetId: string): void {
+    const targetPlayer = this.players.get(targetId);
+    const shooter = this.players.get(projectile.shooterId);
+    
+    if (!targetPlayer || !shooter) {
+      return;
+    }
+    
+    // Create hit event
+    const hitEvent: HitEvent = {
+      shooterId: projectile.shooterId,
+      targetId: targetId,
+      damage: projectile.damage,
+      projectileId: projectile.id
+    };
+    
+    // Apply damage
+    const newHealth = Math.max(0, targetPlayer.health - projectile.damage);
+    targetPlayer.health = newHealth;
+    
+    // Check if player died
+    if (newHealth <= 0 && !targetPlayer.isDead) {
+      this.handlePlayerDeath(targetId, projectile.shooterId);
+    }
+    
+    // Broadcast hit event to all players
+    this.io.emit(SocketEvents.PLAYER_HIT, hitEvent);
+  }
+  
+  /**
+   * Handle player death
+   */
+  private handlePlayerDeath(playerId: string, killerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    
+    // Mark player as dead
+    player.isDead = true;
+    
+    // Drop flag if carrying
+    if (this.flagCarrier === playerId) {
+      // Drop flag at player's position
+      this.handleFlagDrop(playerId, player.position);
+    }
+    
+    // Set respawn time (5 seconds from now)
+    const respawnTime = Date.now() + 5000;
+    player.respawnTime = respawnTime;
+    
+    // Schedule respawn
+    const respawnTimeout = setTimeout(() => {
+      this.respawnPlayer(playerId);
+    }, 5000);
+    
+    // Store timeout reference
+    this.respawnTimeouts.set(playerId, respawnTimeout);
+    
+    // Update game state
+    this.updateGameState();
+    
+    // Broadcast death event
+    this.io.emit(SocketEvents.PLAYER_DIED, {
+      playerId,
+      killerId
+    });
+  }
+  
+  /**
+   * Respawn a player
+   */
+  private respawnPlayer(playerId: string): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    
+    // Clear any existing timeout
+    const timeout = this.respawnTimeouts.get(playerId);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.respawnTimeouts.delete(playerId);
+    }
+    
+    // Reset player state
+    player.isDead = false;
+    player.health = 3; // Reset health
+    player.respawnTime = undefined;
+    
+    // Respawn at team exit
+    const teamExit = this.teamExits.get(player.teamId);
+    if (teamExit) {
+      player.position = { ...teamExit.position };
+    }
+    
+    // Update game state
+    this.updateGameState();
+    
+    // Broadcast respawn event
+    this.io.emit(SocketEvents.PLAYER_RESPAWNED, {
+      playerId,
+      position: player.position
+    });
   }
 
   /**
@@ -98,7 +364,9 @@ export class GameServer {
         rotation: { x: 0, y: 0 },
         color,
         teamId,
-        hasFlag: false
+        hasFlag: false,
+        health: 3, // Start with 3 health
+        isDead: false
       };
       
       // Add player to game state
@@ -131,6 +399,47 @@ export class GameServer {
         }
       });
       
+      // Handle player shooting
+      socket.on(SocketEvents.PLAYER_SHOOT, (shootEvent: ShootEvent) => {
+        const player = this.players.get(socket.id);
+        if (!player || player.isDead) return;
+        
+        // Create a new projectile
+        const projectileId = `${socket.id}_${++this.lastProjectileId}`;
+        
+        let damage = 1; // Default damage
+        let speed = 30; // Default speed
+        
+        // Adjust properties based on weapon type
+        if (shootEvent.weaponType === WeaponType.PAINTBALL_GUN) {
+          damage = 1; // 3 hits to kill
+          speed = 30;
+        }
+        
+        const projectile = new Projectile(
+          projectileId,
+          socket.id,
+          player.teamId,
+          shootEvent.position,
+          shootEvent.direction,
+          speed,
+          damage
+        );
+        
+        // Add to projectiles list
+        this.projectiles.push(projectile);
+        
+        // Broadcast projectile to all players
+        this.io.emit(SocketEvents.PROJECTILE_CREATED, {
+          id: projectileId,
+          shooterId: socket.id,
+          teamId: player.teamId,
+          position: shootEvent.position,
+          direction: shootEvent.direction,
+          weaponType: shootEvent.weaponType
+        });
+      });
+      
       // Handle flag capture
       socket.on(SocketEvents.FLAG_CAPTURED, (data: { playerId: string, teamId: number }) => {
         if (this.gameOver || this.flagCarrier) return; // Ignore if game is over or flag already captured
@@ -152,6 +461,19 @@ export class GameServer {
             teamId: data.teamId
           });
         }
+      });
+      
+      // Handle flag dropped
+      socket.on(SocketEvents.FLAG_DROPPED, (data: { playerId: string, position: { x: number, y: number, z: number } }) => {
+        if (this.gameOver) return; // Ignore if game is over
+        
+        console.log(`Player ${data.playerId} dropped the flag at position`, data.position);
+        
+        // Make sure the player is the flag carrier
+        if (this.flagCarrier !== data.playerId) return;
+        
+        // Handle flag drop
+        this.handleFlagDrop(data.playerId, data.position);
       });
       
       // Handle flag return (team scored)
@@ -221,6 +543,13 @@ export class GameServer {
       socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
         
+        // Clear any respawn timeout
+        const timeout = this.respawnTimeouts.get(socket.id);
+        if (timeout) {
+          clearTimeout(timeout);
+          this.respawnTimeouts.delete(socket.id);
+        }
+        
         // Check if the disconnecting player was carrying the flag
         if (this.flagCarrier === socket.id) {
           this.flagCarrier = null;
@@ -285,16 +614,29 @@ export class GameServer {
     this.winningTeam = null;
     this.flagCarrier = null;
     
+    // Clear all projectiles
+    this.projectiles = [];
+    
     // Reset all players (keep them on the same teams but move to spawn points)
     for (const [socketId, player] of this.players.entries()) {
+      // Cancel any respawn timers
+      const timeout = this.respawnTimeouts.get(socketId);
+      if (timeout) {
+        clearTimeout(timeout);
+        this.respawnTimeouts.delete(socketId);
+      }
+      
       // Get spawn position for team
       const teamExit = this.teamExits.get(player.teamId);
       if (teamExit) {
         player.position = { ...teamExit.position };
       }
       
-      // Reset flag status
+      // Reset player state
+      player.isDead = false;
+      player.health = 3;
       player.hasFlag = false;
+      player.respawnTime = undefined;
     }
     
     // Update game state with new map
@@ -336,9 +678,14 @@ export class GameServer {
   }
   
   /**
-   * Update the game state from the players map
+   * Update the game state and broadcast to all clients
    */
   private updateGameState(): void {
+    // Update hasFlag property for all players based on flagCarrier
+    this.players.forEach((player) => {
+      player.hasFlag = player.id === this.flagCarrier;
+    });
+    
     this.gameState.players = Array.from(this.players.values());
     
     // Convert null to undefined for GameState properties that expect string | undefined
@@ -349,5 +696,48 @@ export class GameServer {
     
     // Convert null to undefined for GameState properties that expect number | undefined
     this.gameState.winningTeam = this.winningTeam === null ? undefined : this.winningTeam;
+  }
+  
+  /**
+   * Handle player dropping the flag
+   */
+  private handleFlagDrop(playerId: string, position: { x: number, y: number, z: number }): void {
+    const player = this.players.get(playerId);
+    if (!player) return;
+    
+    // Update flag carrier status
+    this.flagCarrier = null;
+    player.hasFlag = false;
+    
+    // Update entities to add flag back to map at player's position
+    let flagExists = false;
+    for (const entity of this.mapData.entities) {
+      if (entity.type === EntityType.FLAG) {
+        // Update existing flag position
+        entity.position = { ...position };
+        flagExists = true;
+        break;
+      }
+    }
+    
+    // If no flag exists in the map data (shouldn't happen), add it
+    if (!flagExists) {
+      this.mapData.entities.push({
+        type: EntityType.FLAG,
+        position: { ...position }
+      });
+    }
+    
+    // Update game state
+    this.updateGameState();
+    
+    // Broadcast flag dropped to all players
+    this.io.emit(SocketEvents.FLAG_DROPPED, {
+      playerId,
+      position
+    });
+    
+    // Also send updated map data so clients can see the flag
+    this.io.emit(SocketEvents.MAP_DATA, this.mapData);
   }
 } 

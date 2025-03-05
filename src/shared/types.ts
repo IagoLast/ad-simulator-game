@@ -15,6 +15,9 @@ export interface PlayerState {
   color: string;
   teamId: number; // Team 1 or Team 2
   hasFlag?: boolean; // Indicates if player is carrying the flag
+  health: number; // Current health points
+  isDead: boolean; // Whether the player is currently dead
+  respawnTime?: number; // Timestamp when player should respawn (if dead)
 }
 
 /**
@@ -24,7 +27,8 @@ export enum EntityType {
   WALL = 'wall',
   EXIT = 'exit',
   BILLBOARD = 'billboard',
-  FLAG = 'flag'
+  FLAG = 'flag',
+  PROJECTILE = 'projectile'
 }
 
 /**
@@ -82,6 +86,22 @@ export interface Flag extends MapEntity {
 }
 
 /**
+ * Projectile entity (bullet/paintball)
+ */
+export interface Projectile extends MapEntity {
+  type: EntityType.PROJECTILE;
+  shooterId: string; // ID of the player who shot
+  teamId: number; // Team of the shooter
+  velocity: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  color: string; // Color of the projectile (team color)
+  timestamp: number; // When it was fired
+}
+
+/**
  * Map data containing all entities
  */
 export interface MapData {
@@ -102,6 +122,26 @@ export interface GameState {
 }
 
 /**
+ * Weapon interface for different weapon types
+ */
+export interface Weapon {
+  type: WeaponType;
+  damage: number;
+  fireRate: number; // Shots per second
+  projectileSpeed: number;
+  lastFired: number; // Timestamp of last shot
+  ammo: number; // -1 for infinite
+  maxAmmo: number;
+}
+
+/**
+ * Weapon types
+ */
+export enum WeaponType {
+  PAINTBALL_GUN = 'paintball_gun'
+}
+
+/**
  * Events sent between client and server
  */
 export enum SocketEvents {
@@ -113,8 +153,14 @@ export enum SocketEvents {
   MAP_DATA = 'map_data',
   FLAG_CAPTURED = 'flag_captured',
   FLAG_RETURNED = 'flag_returned',
+  FLAG_DROPPED = 'flag_dropped',
   GAME_OVER = 'game_over',
-  GAME_RESTART = 'game_restart'
+  GAME_RESTART = 'game_restart',
+  PLAYER_SHOOT = 'player_shoot',
+  PROJECTILE_CREATED = 'projectile_created',
+  PLAYER_HIT = 'player_hit',
+  PLAYER_DIED = 'player_died',
+  PLAYER_RESPAWNED = 'player_respawned'
 }
 
 /**
@@ -131,4 +177,32 @@ export interface PlayerMovement {
     x: number;
     y: number;
   };
+}
+
+/**
+ * Shoot event data
+ */
+export interface ShootEvent {
+  playerId: string;
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  direction: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  weaponType: WeaponType;
+}
+
+/**
+ * Hit event data
+ */
+export interface HitEvent {
+  shooterId: string;
+  targetId: string;
+  damage: number;
+  projectileId?: string;
 } 

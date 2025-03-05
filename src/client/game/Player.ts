@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { PlayerState } from '../../shared/types';
+import { PlayerState, Weapon, WeaponType } from '../../shared/types';
+import { PaintballGun } from './weapons/PaintballGun';
 
 /**
- * Player class for handling movement and rotation in a first-person game
+ * Player class representing a player in the game
  */
 export class Player {
   public mesh: THREE.Group;
@@ -24,6 +25,15 @@ export class Player {
   private flag: THREE.Group | null = null; // Reference to flag object when carrying
   private hasFlag: boolean = false;
   
+  // Combat properties
+  private health: number;
+  private maxHealth: number = 3; // 3 hits to die
+  private isDead: boolean = false;
+  private respawnTime: number | null = null;
+  private weapons: Map<WeaponType, Weapon> = new Map();
+  private currentWeapon!: Weapon; // Using definite assignment assertion
+  private weaponMesh: THREE.Group | null = null;
+  
   /**
    * Create a new player
    */
@@ -39,6 +49,8 @@ export class Player {
     this.lastSentPosition = this.position.clone();
     this.teamId = playerState.teamId;
     this.hasFlag = playerState.hasFlag || false;
+    this.health = playerState.health !== undefined ? playerState.health : this.maxHealth;
+    this.isDead = playerState.isDead || false;
     
     // Create player mesh
     this.mesh = new THREE.Group();
@@ -63,72 +75,163 @@ export class Player {
       emissive: playerState.color,
       emissiveIntensity: 0.5
     });
+    
     this.teamIndicator = new THREE.Mesh(badgeGeometry, badgeMaterial);
+    this.teamIndicator.position.set(0, this.playerHeight - 0.5, 0.6); // Position on shoulder/chest
     
-    // Position badge on the shoulder/chest
-    this.teamIndicator.position.set(0, this.playerHeight - 0.4, -0.3);
-    this.mesh.add(this.teamIndicator);
-    
-    // Create eyes to indicate direction
-    this.eyes = new THREE.Group();
-    this.eyes.position.y = this.playerHeight - 0.3; // Place eyes near the top of the body
-    this.eyes.position.z = -0.51; // Slightly in front of the body surface
-    this.mesh.add(this.eyes);
-    
-    // Left eye
-    const eyeGeometry = new THREE.SphereGeometry(0.1, 8, 8);
-    const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
-    const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    leftEye.position.x = -0.2;
-    this.eyes.add(leftEye);
-    
-    // Right eye
-    const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    rightEye.position.x = 0.2;
-    this.eyes.add(rightEye);
-    
-    // Add pupils to make direction even clearer
-    const pupilGeometry = new THREE.SphereGeometry(0.04, 8, 8);
-    const pupilMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
-    
-    // Left pupil
-    const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-    leftPupil.position.z = -0.08;
-    leftEye.add(leftPupil);
-    
-    // Right pupil
-    const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
-    rightPupil.position.z = -0.08;
-    rightEye.add(rightPupil);
-    
-    // Create team flag/banner on player's back
-    const flagGeometry = new THREE.BoxGeometry(0.8, 0.5, 0.05);
-    const flagMaterial = new THREE.MeshStandardMaterial({
-      color: playerState.color,
-      emissive: playerState.color,
-      emissiveIntensity: 0.3
-    });
-    const flag = new THREE.Mesh(flagGeometry, flagMaterial);
-    flag.position.set(0, this.playerHeight - 0.5, 0.5);
-    this.mesh.add(flag);
-    
-    // Hide eyes and front-facing elements for local player to avoid obscuring view
-    if (isLocalPlayer) {
-      this.eyes.visible = false;
-      
-      // Make team indicator less obtrusive for local player
-      if (this.teamIndicator) {
-        this.teamIndicator.visible = false;
-      }
+    // Add team indicator only if it's not a local player (to avoid blocking view)
+    if (!isLocalPlayer) {
+      this.mesh.add(this.teamIndicator);
     }
     
-    // If player has the flag, create and attach it
+    // Add eyes to show which direction player is facing
+    this.eyes = new THREE.Group();
+    
+    const eyeGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+    const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+    
+    const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    leftEye.position.set(-0.2, this.playerHeight - 0.3, 0.5);
+    
+    const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+    rightEye.position.set(0.2, this.playerHeight - 0.3, 0.5);
+    
+    this.eyes.add(leftEye);
+    this.eyes.add(rightEye);
+    
+    // Only add eyes for non-local players to avoid view obstruction
+    if (!isLocalPlayer) {
+      this.mesh.add(this.eyes);
+    }
+    
+    // Position mesh at player position
+    this.mesh.position.copy(this.position);
+    
+    // Create flag if player already has it
     if (this.hasFlag) {
       this.addFlagToPlayer();
     }
     
-    // Update initial transform
-    this.updateMeshTransform();
+    // Initialize weapons
+    this.initializeWeapons();
+    
+    // Create weapon mesh
+    this.createWeaponMesh();
+    
+    // Update visibility based on dead status
+    this.updateVisibility();
+  }
+  
+  /**
+   * Initialize player's weapons
+   */
+  private initializeWeapons(): void {
+    // Create paintball gun as the default weapon
+    const paintballGun = new PaintballGun();
+    this.weapons.set(WeaponType.PAINTBALL_GUN, paintballGun);
+    
+    // Set current weapon
+    this.currentWeapon = paintballGun;
+  }
+  
+  /**
+   * Create a visual representation of the weapon
+   */
+  private createWeaponMesh(): void {
+    if (this.isLocalPlayer) {
+      // For local player, create a first-person weapon model
+      const weaponGroup = new THREE.Group();
+      
+      // Simple gun model
+      const gunBody = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.1, 0.4),
+        new THREE.MeshStandardMaterial({ color: 0x333333 })
+      );
+      gunBody.position.set(0, -0.05, 0.2);
+      
+      const gunBarrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0x555555 })
+      );
+      gunBarrel.rotation.x = Math.PI / 2;
+      gunBarrel.position.set(0, 0, 0.4);
+      
+      const paintballChamber = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 16, 8),
+        new THREE.MeshStandardMaterial({ 
+          color: 0x888888, 
+          transparent: true,
+          opacity: 0.8 
+        })
+      );
+      paintballChamber.position.set(0, 0.1, 0.2);
+      
+      // Add parts to weapon group
+      weaponGroup.add(gunBody);
+      weaponGroup.add(gunBarrel);
+      weaponGroup.add(paintballChamber);
+      
+      // Position the weapon in the player's view
+      weaponGroup.position.set(
+        0.3, // Right side
+        -0.2, // Below center
+        -0.5  // In front
+      );
+      
+      this.weaponMesh = weaponGroup;
+      
+      // If camera is attached, add weapon to camera
+      if (this.camera) {
+        this.camera.add(this.weaponMesh);
+      }
+    } else {
+      // For other players, create a third-person weapon model attached to their hand
+      const weaponGroup = new THREE.Group();
+      
+      // Simple gun
+      const gunBody = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.1, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0x333333 })
+      );
+      
+      const gunBarrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8),
+        new THREE.MeshStandardMaterial({ color: 0x555555 })
+      );
+      gunBarrel.rotation.x = Math.PI / 2;
+      gunBarrel.position.set(0, 0, 0.2);
+      
+      weaponGroup.add(gunBody);
+      weaponGroup.add(gunBarrel);
+      
+      // Position at player's hand
+      weaponGroup.position.set(0.5, this.playerHeight - 0.5, 0.3);
+      weaponGroup.rotation.y = -Math.PI / 4; // Angle the gun forward
+      
+      this.weaponMesh = weaponGroup;
+      this.mesh.add(this.weaponMesh);
+    }
+  }
+  
+  /**
+   * Update player visibility based on dead status
+   */
+  private updateVisibility(): void {
+    if (this.isDead) {
+      this.mesh.visible = false;
+      
+      // Also hide weapon if local player
+      if (this.isLocalPlayer && this.camera && this.weaponMesh) {
+        this.weaponMesh.visible = false;
+      }
+    } else {
+      this.mesh.visible = true;
+      
+      // Show weapon if local player
+      if (this.isLocalPlayer && this.camera && this.weaponMesh) {
+        this.weaponMesh.visible = true;
+      }
+    }
   }
   
   /**
@@ -167,12 +270,30 @@ export class Player {
       }
     }
     
+    // Update health and death status
+    this.health = playerState.health;
+    const wasDeadBefore = this.isDead;
+    this.isDead = playerState.isDead;
+    
+    // If death status changed, update visibility
+    if (wasDeadBefore !== this.isDead) {
+      this.updateVisibility();
+    }
+    
+    // Update respawn time
+    if (playerState.respawnTime) {
+      this.respawnTime = playerState.respawnTime;
+    } else {
+      this.respawnTime = null;
+    }
+    
     // Update mesh position and rotation
     this.updateMeshTransform();
   }
   
   /**
    * Update player position
+   * @param position New position
    */
   public updatePosition(position: { x: number, y: number, z: number }): void {
     this.position.set(position.x, position.y, position.z);
@@ -181,42 +302,56 @@ export class Player {
   
   /**
    * Update player rotation
+   * @param rotation New rotation
    */
   public updateRotation(rotation: { x?: number, y: number }): void {
+    this.rotation.y = rotation.y;
     if (rotation.x !== undefined) {
       this.rotation.x = rotation.x;
     }
-    this.rotation.y = rotation.y;
     this.updateMeshTransform();
   }
   
   /**
-   * Attach a camera to this player
+   * Attach camera to player for first-person view
+   * @param camera The camera to attach
    */
   public attachCamera(camera: THREE.PerspectiveCamera): void {
     this.camera = camera;
     
-    // Position the camera at eye level
-    camera.position.y = this.playerHeight - 0.2;
-    this.mesh.add(camera);
+    // Don't parent the camera to the mesh - we'll update its position manually
+    // This prevents issues with rotations and hierarchy
+    
+    // Set initial camera position
+    camera.position.copy(this.position);
+    camera.position.y += this.playerHeight * 0.8; // Position at eye level
+    
+    // Set initial camera rotation
+    camera.rotation.order = 'YXZ';
+    camera.rotation.x = this.rotation.x;
+    camera.rotation.y = this.rotation.y;
+    
+    // Update mesh transform to ensure everything is positioned correctly
+    this.updateMeshTransform();
   }
   
   /**
-   * Set the walls for collision detection
+   * Set walls for collision detection
+   * @param walls Array of wall objects
    */
   public setWalls(walls: THREE.Object3D[]): void {
     this.walls = walls;
   }
   
   /**
-   * Get the player's team ID
+   * Get player's team ID
    */
   public getTeamId(): number {
     return this.teamId;
   }
   
   /**
-   * Get player ID
+   * Get player's ID
    */
   public getId(): string {
     return this.id;
@@ -234,37 +369,39 @@ export class Player {
     movement: { forward: boolean, backward: boolean, left: boolean, right: boolean, mouseX: number, mouseY: number },
     walls: THREE.Object3D[]
   ): boolean {
-    // Update walls reference
-    this.walls = walls;
-    
-    // Store previous position for comparison
-    const previousPosition = this.position.clone();
-    
-    // Apply rotation from mouse movement
-    if (this.isLocalPlayer) {
-      this.rotate(movement.mouseX, movement.mouseY);
+    // Don't update if player is dead
+    if (this.isDead) {
+      return false;
     }
     
-    // Apply movement
-    this.move(
-      movement.forward,
-      movement.backward,
-      movement.left,
-      movement.right,
-      deltaTime
-    );
+    // Store previous position for comparison
+    const prevPosition = this.position.clone();
     
-    // Check if position has changed enough to send to server
-    const movedEnough = this.position.distanceTo(this.lastSentPosition) > this.positionThreshold;
-    if (movedEnough) {
+    // Update player rotation based on mouse movement
+    this.rotate(movement.mouseX, movement.mouseY);
+    
+    // Move player based on keyboard input
+    this.move(movement.forward, movement.backward, movement.left, movement.right, deltaTime);
+    
+    // Compare with previous position to see if significant change
+    const distance = this.position.distanceTo(this.lastSentPosition);
+    const positionChanged = distance > this.positionThreshold;
+    
+    // Update last sent position if changed significantly
+    if (positionChanged) {
       this.lastSentPosition.copy(this.position);
     }
     
-    return movedEnough;
+    return positionChanged;
   }
   
   /**
-   * Move the player
+   * Move player based on input
+   * @param forward Whether forward key is pressed
+   * @param backward Whether backward key is pressed
+   * @param left Whether left key is pressed
+   * @param right Whether right key is pressed
+   * @param deltaTime Time since last update in seconds
    */
   public move(
     forward: boolean, 
@@ -273,101 +410,108 @@ export class Player {
     right: boolean, 
     deltaTime: number
   ): void {
-    // Skip if no movement
-    if (!forward && !backward && !left && !right) {
+    // Skip if player is dead
+    if (this.isDead) {
       return;
     }
     
-    // Calculate movement vector
-    const moveVector = new THREE.Vector3(0, 0, 0);
+    // Calculate direction based on rotation
+    const direction = new THREE.Vector3();
     
-    // Forward/backward movement along z-axis
-    if (forward) moveVector.z -= 1;
-    if (backward) moveVector.z += 1;
-    
-    // Left/right movement along x-axis
-    if (left) moveVector.x -= 1;
-    if (right) moveVector.x += 1;
-    
-    // Normalize to prevent diagonal movement being faster
-    if (moveVector.length() > 0) {
-      moveVector.normalize();
+    // Forward/backward movement (Z-axis)
+    if (forward) {
+      direction.z = -1; // Forward is negative Z in three.js
+    } else if (backward) {
+      direction.z = 1; // Backward is positive Z
     }
     
-    // Convert to world space based on player rotation
-    const rotationMatrix = new THREE.Matrix4();
-    rotationMatrix.makeRotationY(this.rotation.y);
-    moveVector.applyMatrix4(rotationMatrix);
+    // Left/right movement (X-axis)
+    if (left) {
+      direction.x = -1; // Left is negative X
+    } else if (right) {
+      direction.x = 1; // Right is positive X
+    }
     
-    // Scale by move speed and delta time
-    moveVector.multiplyScalar(this.moveSpeed * deltaTime);
-    
-    // Apply movement with collision detection
-    this.moveWithCollision(moveVector);
-    
-    // Update mesh transform
-    this.updateMeshTransform();
+    // Normalize the direction vector to maintain consistent speed in all directions
+    if (direction.length() > 0) {
+      direction.normalize();
+      
+      // Calculate move amount based on speed and delta time
+      const moveAmount = this.moveSpeed * deltaTime;
+      
+      // Apply movement amount to direction
+      direction.multiplyScalar(moveAmount);
+      
+      // Apply rotation to movement direction (so forward is camera direction)
+      const matrix = new THREE.Matrix4();
+      matrix.makeRotationY(this.rotation.y);
+      direction.applyMatrix4(matrix);
+      
+      // Move with collision detection
+      this.moveWithCollision(direction);
+    }
   }
   
   /**
-   * Move with collision detection
+   * Move player with collision detection
+   * @param moveVector Vector to move by
    */
   private moveWithCollision(moveVector: THREE.Vector3): void {
-    // If no walls, just apply the movement
-    if (this.walls.length === 0) {
-      this.position.add(moveVector);
-      return;
-    }
-    
-    // Create a ray for collision detection
+    // Create a raycaster for collision detection
     const raycaster = new THREE.Raycaster();
-    const playerCenter = this.position.clone();
-    playerCenter.y += this.playerHeight / 2; // Center of player (not feet)
     
-    // Try to move in X direction
-    if (Math.abs(moveVector.x) > 0) {
-      const direction = new THREE.Vector3(Math.sign(moveVector.x), 0, 0);
-      raycaster.set(playerCenter, direction);
-      const intersects = raycaster.intersectObjects(this.walls);
-      
-      if (intersects.length > 0 && intersects[0].distance < Math.abs(moveVector.x) + this.playerRadius) {
-        moveVector.x = 0; // Cannot move in this direction
-      }
+    // Movement distance
+    const distance = moveVector.length();
+    
+    // Skip if not moving
+    if (distance === 0) return;
+    
+    // Normalize the movement vector
+    const moveDirection = moveVector.clone().normalize();
+    
+    // Set raycaster position and direction
+    raycaster.set(
+      this.position.clone().add(new THREE.Vector3(0, this.playerHeight / 2, 0)),
+      moveDirection
+    );
+    
+    // Check distance to closest wall in movement direction
+    const intersections = raycaster.intersectObjects(this.walls);
+    
+    // If there's a wall within movement distance + player radius, adjust movement
+    if (intersections.length > 0 && intersections[0].distance < distance + this.playerRadius) {
+      // Move up to the wall, but not into it
+      const adjustedDistance = Math.max(0, intersections[0].distance - this.playerRadius - 0.1);
+      moveVector.setLength(adjustedDistance);
     }
     
-    // Try to move in Z direction
-    if (Math.abs(moveVector.z) > 0) {
-      const direction = new THREE.Vector3(0, 0, Math.sign(moveVector.z));
-      raycaster.set(playerCenter, direction);
-      const intersects = raycaster.intersectObjects(this.walls);
-      
-      if (intersects.length > 0 && intersects[0].distance < Math.abs(moveVector.z) + this.playerRadius) {
-        moveVector.z = 0; // Cannot move in this direction
-      }
-    }
-    
-    // Apply the adjusted movement
+    // Apply movement
     this.position.add(moveVector);
-  }
-  
-  /**
-   * Rotate the player
-   */
-  public rotate(mouseX: number, mouseY: number): void {
-    // Apply horizontal rotation (yaw)
-    this.rotation.y -= mouseX * 0.002;
-    
-    // Apply vertical rotation (pitch) with limits
-    this.rotation.x -= mouseY * 0.002;
-    this.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.rotation.x));
     
     // Update mesh transform
     this.updateMeshTransform();
-    
-    // Update camera rotation if attached
-    if (this.camera) {
-      this.camera.rotation.x = this.rotation.x;
+  }
+  
+  /**
+   * Rotate player based on mouse movement
+   * @param mouseX Mouse X movement
+   * @param mouseY Mouse Y movement
+   */
+  public rotate(mouseX: number, mouseY: number): void {
+    // Skip if no mouse movement or player is dead
+    if ((mouseX === 0 && mouseY === 0) || this.isDead) {
+      return;
     }
+    
+    // Apply horizontal rotation (around Y axis)
+    this.rotation.y -= mouseX * 0.003;
+    
+    // Apply vertical rotation (around X axis) with limits to prevent flipping
+    this.rotation.x -= mouseY * 0.003;
+    this.rotation.x = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, this.rotation.x));
+    
+    // Update mesh transform
+    this.updateMeshTransform();
   }
   
   /**
@@ -377,8 +521,31 @@ export class Player {
     // Update position
     this.mesh.position.copy(this.position);
     
-    // Update rotation (yaw only for the mesh)
+    // Update player body rotation (Y axis only)
     this.mesh.rotation.y = this.rotation.y;
+    
+    // Update camera if this is local player
+    if (this.isLocalPlayer && this.camera) {
+      // Position camera at eye level
+      this.camera.position.copy(this.position);
+      this.camera.position.y += this.playerHeight * 0.8; // Position at eye level
+      
+      // Apply both rotations to camera (look direction)
+      this.camera.rotation.order = 'YXZ'; // Important for proper first-person camera
+      this.camera.rotation.x = this.rotation.x;
+      this.camera.rotation.y = this.rotation.y;
+      this.camera.rotation.z = 0;
+    }
+    
+    // Update weapon position if present
+    if (this.weaponMesh) {
+      this.positionWeaponMesh();
+    }
+    
+    // Update flag position if carrying
+    if (this.flag) {
+      this.positionFlagOnPlayer();
+    }
   }
   
   /**
@@ -434,12 +601,18 @@ export class Player {
     this.flag.add(pole);
     this.flag.add(flagMesh);
     
-    // Position the flag on the player's back
-    this.flag.position.set(0, this.playerHeight - 0.5, -0.3);
-    this.flag.rotation.set(0, 0, 0);
-    
     // Add to player mesh
     this.mesh.add(this.flag);
+    
+    // Position the flag on the player's back
+    this.flag.position.set(0, 0.5, 0.3); // Up and back
+    this.flag.rotation.set(0, 0, 0);
+    
+    // Scale down the flag when carried
+    this.flag.scale.set(0.5, 0.5, 0.5);
+    
+    // Set flag status
+    this.hasFlag = true;
     
     console.log(`Flag added to player ${this.id}`);
   }
@@ -482,5 +655,324 @@ export class Player {
         this.removeFlagFromPlayer();
       }
     }
+  }
+  
+  /**
+   * Check if player is dead
+   */
+  public isDying(): boolean {
+    return this.isDead;
+  }
+  
+  /**
+   * Get player's current health
+   */
+  public getHealth(): number {
+    return this.health;
+  }
+  
+  /**
+   * Take damage from a hit
+   * @param damage Amount of damage to take
+   * @returns True if the damage caused death
+   */
+  public takeDamage(damage: number): boolean {
+    // Play hit animation
+    this.showHitEffect();
+    
+    // Reduce health
+    this.health = Math.max(0, this.health - damage);
+    
+    console.log(`Player ${this.id} took ${damage} damage, health now: ${this.health}`);
+    
+    // Check if player died
+    if (this.health <= 0 && !this.isDead) {
+      this.die();
+      return true;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Show hit visual effect
+   */
+  private showHitEffect(): void {
+    // Flash player body red
+    if (this.playerBody) {
+      const originalMaterial = this.playerBody.material as THREE.MeshStandardMaterial;
+      const originalColor = originalMaterial.color.clone();
+      const hitColor = new THREE.Color(0xff0000); // Red
+      
+      // Store original emissive intensity
+      const originalEmissiveIntensity = originalMaterial.emissiveIntensity;
+      
+      // Set hit effect
+      originalMaterial.emissive.set(hitColor);
+      originalMaterial.emissiveIntensity = 1.0;
+      
+      // Reset after a short time
+      setTimeout(() => {
+        originalMaterial.emissive.set(originalColor);
+        originalMaterial.emissiveIntensity = originalEmissiveIntensity;
+      }, 150);
+    }
+    
+    // Create hit particles
+    this.createHitParticles();
+  }
+  
+  /**
+   * Create particle effect for hit
+   */
+  private createHitParticles(): void {
+    // Create particles at player position
+    const particleCount = 15;
+    const particleGroup = new THREE.Group();
+    
+    // Set position to player with random offset
+    particleGroup.position.copy(this.position);
+    particleGroup.position.y += this.playerHeight * 0.5 + (Math.random() * 0.5 - 0.25);
+    
+    // Get team color for particles
+    const color = this.teamId === 1 ? 0xFF3333 : 0x3333FF;
+    
+    // Create particles
+    for (let i = 0; i < particleCount; i++) {
+      const particleGeometry = new THREE.SphereGeometry(0.05, 4, 4);
+      const particleMaterial = new THREE.MeshBasicMaterial({
+        color: color,
+        transparent: true,
+        opacity: 0.8
+      });
+      
+      const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+      
+      // Random initial position around center
+      particle.position.set(
+        (Math.random() - 0.5) * 0.3,
+        (Math.random() - 0.5) * 0.3,
+        (Math.random() - 0.5) * 0.3
+      );
+      
+      // Random velocity
+      const velocity = new THREE.Vector3(
+        (Math.random() - 0.5) * 2,
+        Math.random() * 2,
+        (Math.random() - 0.5) * 2
+      );
+      
+      // Store velocity in userData for animation
+      particle.userData.velocity = velocity;
+      particle.userData.life = 1.0; // Full opacity to start
+      
+      particleGroup.add(particle);
+    }
+    
+    // Add to scene
+    this.mesh.parent?.add(particleGroup);
+    
+    // Animate particles
+    const animateParticles = () => {
+      let allDead = true;
+      
+      // Update particles
+      particleGroup.children.forEach((child) => {
+        const particle = child as THREE.Mesh;
+        const velocity = particle.userData.velocity as THREE.Vector3;
+        
+        // Apply gravity
+        velocity.y -= 0.05;
+        
+        // Move particle
+        particle.position.add(velocity.clone().multiplyScalar(0.05));
+        
+        // Reduce life/opacity
+        particle.userData.life -= 0.02;
+        
+        // Update opacity
+        const material = particle.material as THREE.MeshBasicMaterial;
+        material.opacity = particle.userData.life;
+        
+        // Check if still alive
+        if (particle.userData.life > 0) {
+          allDead = false;
+        }
+      });
+      
+      // If all particles are dead, remove the group
+      if (allDead) {
+        particleGroup.parent?.remove(particleGroup);
+        return;
+      }
+      
+      // Continue animation
+      requestAnimationFrame(animateParticles);
+    };
+    
+    // Start animation
+    animateParticles();
+  }
+  
+  /**
+   * Handle player death
+   */
+  private die(): void {
+    console.log(`Player ${this.id} died!`);
+    
+    // Set dead state
+    this.isDead = true;
+    
+    // Remove flag if carrying
+    if (this.hasFlag) {
+      this.dropFlag();
+    }
+    
+    // Hide player object
+    this.updateVisibility();
+  }
+  
+  /**
+   * Drop the flag at the current position
+   */
+  private dropFlag(): void {
+    console.log(`Player ${this.id} dropped the flag`);
+    
+    // Only handle on server side, but notify server we dropped it
+    if (this.isLocalPlayer) {
+      // Emit event to server
+      const customEvent = new CustomEvent('flag_dropped', {
+        detail: {
+          position: this.position,
+          playerId: this.id
+        }
+      });
+      document.dispatchEvent(customEvent);
+    }
+    
+    // Remove flag from player
+    this.removeFlagFromPlayer();
+  }
+  
+  /**
+   * Respawn the player
+   * @param position Position to respawn at
+   */
+  public respawn(position: { x: number, y: number, z: number }): void {
+    this.isDead = false;
+    this.health = this.maxHealth;
+    this.respawnTime = null;
+    
+    // Update position
+    this.position.set(position.x, position.y, position.z);
+    
+    // Update visibility
+    this.updateVisibility();
+    
+    // Update mesh transform
+    this.updateMeshTransform();
+  }
+  
+  /**
+   * Fire the player's weapon
+   * @returns Object with shot data if successful, null if couldn't shoot
+   */
+  public shoot(): { position: THREE.Vector3, direction: THREE.Vector3 } | null {
+    // Skip if dead or weapon not available
+    if (this.isDead || !this.currentWeapon) {
+      return null;
+    }
+    
+    // Check fire rate
+    const now = Date.now();
+    if (now - this.currentWeapon.lastFired < 1000 / this.currentWeapon.fireRate) {
+      return null; // Can't fire yet
+    }
+    
+    // Update last fired time
+    this.currentWeapon.lastFired = now;
+    
+    // Calculate shot position (from camera or player position)
+    const shotPosition = new THREE.Vector3();
+    if (this.isLocalPlayer && this.camera) {
+      // For local player, use camera position
+      this.camera.getWorldPosition(shotPosition);
+    } else {
+      // For other players, use player position plus height
+      shotPosition.copy(this.position).add(new THREE.Vector3(0, this.playerHeight - 0.3, 0));
+    }
+    
+    // Calculate shot direction
+    const shotDirection = new THREE.Vector3(0, 0, -1); // Forward
+    
+    // Apply rotation
+    const rotationMatrix = new THREE.Matrix4();
+    rotationMatrix.makeRotationY(this.rotation.y);
+    rotationMatrix.multiply(new THREE.Matrix4().makeRotationX(this.rotation.x));
+    shotDirection.applyMatrix4(rotationMatrix);
+    
+    return {
+      position: shotPosition,
+      direction: shotDirection
+    };
+  }
+  
+  /**
+   * Position the weapon mesh relative to the player
+   */
+  private positionWeaponMesh(): void {
+    if (!this.weaponMesh || !this.camera) return;
+    
+    if (this.isLocalPlayer) {
+      // For local player, position weapon relative to camera
+      // Remove from scene if it's there
+      if (this.weaponMesh.parent !== this.camera) {
+        if (this.weaponMesh.parent) {
+          this.weaponMesh.parent.remove(this.weaponMesh);
+        }
+        this.camera.add(this.weaponMesh);
+      }
+      
+      // Position in front of camera
+      this.weaponMesh.position.set(0.3, -0.3, -0.5); // Right, down, forward
+      this.weaponMesh.rotation.set(0, 0, 0);
+    } else {
+      // For other players, position weapon in hand
+      // Remove from camera if it's there
+      if (this.weaponMesh.parent !== this.mesh) {
+        if (this.weaponMesh.parent) {
+          this.weaponMesh.parent.remove(this.weaponMesh);
+        }
+        this.mesh.add(this.weaponMesh);
+      }
+      
+      // Position in hand
+      const offset = new THREE.Vector3(0.3, -0.2, -0.5); // Right, down, forward
+      offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
+      this.weaponMesh.position.copy(offset);
+      this.weaponMesh.rotation.y = 0; // Relative to player
+    }
+  }
+  
+  /**
+   * Position the flag on the player's back
+   */
+  private positionFlagOnPlayer(): void {
+    if (!this.flag) return;
+    
+    // Remove from scene if it's there
+    if (this.flag.parent !== this.mesh) {
+      if (this.flag.parent) {
+        this.flag.parent.remove(this.flag);
+      }
+      this.mesh.add(this.flag);
+    }
+    
+    // Position flag on the player's back
+    this.flag.position.set(0, 0.5, 0.3); // Up and back
+    this.flag.rotation.set(0, 0, 0); // Reset rotation
+    
+    // Scale down the flag when carried
+    this.flag.scale.set(0.5, 0.5, 0.5);
   }
 } 

@@ -20,6 +20,7 @@ export class Controls {
   private mouseSensitivity: number;
   private isPointerLocked: boolean;
   private canvas: HTMLCanvasElement;
+  private shooting: boolean = false;
   
   /**
    * Initialize controls
@@ -38,6 +39,8 @@ export class Controls {
     
     // Set up mouse event listeners
     document.addEventListener('mousemove', this.onMouseMove.bind(this));
+    document.addEventListener('mousedown', this.onMouseDown.bind(this));
+    document.addEventListener('mouseup', this.onMouseUp.bind(this));
     this.canvas.addEventListener('click', this.requestPointerLock.bind(this));
     
     // Handle pointer lock changes
@@ -72,6 +75,31 @@ export class Controls {
     const key = event.key.toLowerCase();
     if (['w', 'a', 's', 'd'].includes(key)) {
       this.keys[key] = false;
+    }
+  }
+  
+  /**
+   * Handle mouse down events
+   */
+  private onMouseDown(event: MouseEvent): void {
+    // Only handle mouse if pointer is locked
+    if (!this.isPointerLocked) {
+      return;
+    }
+    
+    // Left mouse button (0) for shooting
+    if (event.button === 0) {
+      this.shooting = true;
+    }
+  }
+  
+  /**
+   * Handle mouse up events
+   */
+  private onMouseUp(event: MouseEvent): void {
+    // Left mouse button (0) for shooting
+    if (event.button === 0) {
+      this.shooting = false;
     }
   }
   
@@ -137,6 +165,13 @@ export class Controls {
    */
   private isKeyPressed(key: string): boolean {
     return this.keys[key] === true;
+  }
+  
+  /**
+   * Check if player is shooting
+   */
+  public isShooting(): boolean {
+    return this.shooting;
   }
   
   /**

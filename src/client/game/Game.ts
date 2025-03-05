@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { io, Socket } from 'socket.io-client';
-import { EntityType, GameState, MapData, PlayerMovement, PlayerState, SocketEvents } from '../../shared/types';
+import { EntityType, GameState, MapData, PlayerMovement, PlayerState, SocketEvents, ShootEvent, WeaponType, HitEvent } from '../../shared/types';
 import { Controls } from './Controls';
 import { Player } from './Player';
 import { MapRenderer } from './core/MapRenderer';
@@ -81,6 +81,18 @@ export class Game {
     
     // Start animation loop
     this.animate();
+    
+    // Listen for flag drop events
+    document.addEventListener('flag_dropped', (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (this.socket) {
+        console.log('Sending flag dropped event to server:', detail);
+        this.socket.emit(SocketEvents.FLAG_DROPPED, {
+          playerId: detail.playerId,
+          position: detail.position
+        });
+      }
+    });
   }
 
   /**
@@ -410,6 +422,102 @@ export class Game {
       this.showGameMessage('New game starting!', 'white', 3000);
     });
     
+    // Handle projectile creation from other players
+    this.socket.on(SocketEvents.PROJECTILE_CREATED, (data: {
+      id: string,
+      shooterId: string,
+      teamId: number,
+      position: { x: number, y: number, z: number },
+      direction: { x: number, y: number, z: number },
+      weaponType: WeaponType
+    }) => {
+      // Skip if this is our own projectile (we already created it locally)
+      if (data.shooterId === this.socket.id) return;
+      
+      console.log('Remote projectile created:', data);
+      
+      // Create visual representation of the projectile
+      const position = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
+      const direction = new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z);
+      
+      this.createProjectileVisual(position, direction, data.teamId);
+    });
+    
+    // Handle player hit events
+    this.socket.on(SocketEvents.PLAYER_HIT, (data: HitEvent) => {
+      console.log('Player hit:', data);
+      
+      // If local player was hit, apply damage
+      if (data.targetId === this.socket.id && this.localPlayer) {
+        this.localPlayer.takeDamage(data.damage);
+      } 
+      // If another player was hit, show hit effect
+      else if (this.players.has(data.targetId)) {
+        const hitPlayer = this.players.get(data.targetId);
+        if (hitPlayer) {
+          hitPlayer.takeDamage(data.damage);
+        }
+      }
+    });
+    
+    // Handle player death events
+    this.socket.on(SocketEvents.PLAYER_DIED, (data: { playerId: string, killerId: string }) => {
+      console.log('Player died:', data);
+      
+      // If it's the local player
+      if (data.playerId === this.socket.id && this.localPlayer) {
+        // Show death message
+        this.showGameMessage('You were eliminated! Respawning in 5 seconds...', '#FF0000', 5000);
+      } else {
+        // Update other player's state
+        const player = this.players.get(data.playerId);
+        if (player) {
+          player.takeDamage(999); // Force death state
+        }
+      }
+    });
+    
+    // Handle player respawn events
+    this.socket.on(SocketEvents.PLAYER_RESPAWNED, (data: { playerId: string, position: { x: number, y: number, z: number } }) => {
+      console.log('Player respawned:', data);
+      
+      // If it's another player
+      if (data.playerId !== this.socket.id) {
+        const player = this.players.get(data.playerId);
+        if (player) {
+          player.respawn(data.position);
+        }
+      }
+    });
+    
+    // Handle flag dropped events
+    this.socket.on(SocketEvents.FLAG_DROPPED, (data: { 
+      position: { x: number, y: number, z: number },
+      playerId: string 
+    }) => {
+      console.log('Flag dropped:', data);
+      
+      // If the flag carrier was the local player, remove flag
+      if (data.playerId === this.socket.id && this.localPlayer) {
+        this.localPlayer.setHasFlag(false);
+      }
+      
+      // If the flag carrier was another player, remove flag
+      const player = this.players.get(data.playerId);
+      if (player) {
+        player.setHasFlag(false);
+      }
+      
+      // Clear flag carrier status
+      this.flagCarrier = null;
+      
+      // Update team info to reflect flag status
+      this.updateTeamInfo();
+      
+      // Show message
+      this.showGameMessage('Flag has been dropped!', 'yellow', 3000);
+    });
+    
     // Join the game when connected
     this.socket.on('connect', () => {
       console.log('Connected to server with ID:', this.socket.id);
@@ -501,6 +609,11 @@ export class Game {
       
       // Check for exit/base collision
       this.checkExitCollision();
+      
+      // Handle shooting
+      if (this.controls.isShooting() && !this.localPlayer.isDying()) {
+        this.handlePlayerShoot();
+      }
       
       // Update player position based on input
       const positionChanged = this.localPlayer.update(deltaTime, movement, this.walls);
@@ -614,6 +727,178 @@ export class Game {
       // Emit flag returned event (team scored)
       this.socket.emit(SocketEvents.FLAG_RETURNED, playerTeamId);
     }
+  }
+  
+  /**
+   * Handle player shooting
+   */
+  private handlePlayerShoot(): void {
+    // Check if socket is connected and has an ID and local player exists
+    if (!this.socket || !this.socket.id || !this.localPlayer) return;
+    
+    // Try to shoot
+    const shotData = this.localPlayer.shoot();
+    if (!shotData) return; // Can't shoot yet
+    
+    // Create shoot event data
+    const shootEvent: ShootEvent = {
+      playerId: this.socket.id,
+      position: {
+        x: shotData.position.x,
+        y: shotData.position.y,
+        z: shotData.position.z
+      },
+      direction: {
+        x: shotData.direction.x,
+        y: shotData.direction.y,
+        z: shotData.direction.z
+      },
+      weaponType: WeaponType.PAINTBALL_GUN
+    };
+    
+    // Send shoot event to server
+    this.socket.emit(SocketEvents.PLAYER_SHOOT, shootEvent);
+    
+    // Create visual projectile (optional - server will create the actual projectile)
+    this.createProjectileVisual(
+      new THREE.Vector3(shotData.position.x, shotData.position.y, shotData.position.z),
+      new THREE.Vector3(shotData.direction.x, shotData.direction.y, shotData.direction.z),
+      this.localPlayer.getTeamId()
+    );
+  }
+  
+  /**
+   * Create a visual projectile without physics (for effects only)
+   */
+  private createProjectileVisual(position: THREE.Vector3, direction: THREE.Vector3, teamId: number): void {
+    // Get color based on team
+    const color = teamId === 1 ? 0xFF3333 : 0x3333FF;
+    
+    // Create paintball
+    const projectile = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.5
+      })
+    );
+    
+    // Set position
+    projectile.position.copy(position);
+    
+    // Add to scene
+    this.scene.add(projectile);
+    
+    // Animate projectile
+    const speed = 30; // Units per second
+    const maxDistance = 50; // Max travel distance
+    const startPosition = position.clone();
+    const gravity = 9.8; // Gravity acceleration (m/s²)
+    
+    // Use a normalized direction vector
+    const normalizedDirection = direction.clone().normalize();
+    
+    // Initial velocity
+    const velocity = normalizedDirection.clone().multiplyScalar(speed);
+    
+    // Time tracking for physics
+    let elapsedTime = 0;
+    const timeStep = 0.016; // ~60fps
+    
+    // Animation function for projectile
+    const animateProjectile = () => {
+      // Update elapsed time
+      elapsedTime += timeStep;
+      
+      // Apply gravity to velocity
+      velocity.y -= gravity * timeStep;
+      
+      // Move projectile
+      projectile.position.add(velocity.clone().multiplyScalar(timeStep));
+      
+      // Prevent projectiles from going below ground
+      if (projectile.position.y < 0.1) {
+        projectile.position.y = 0.1;
+        velocity.y = 0; // Stop vertical movement
+      }
+      
+      // Check if projectile has traveled too far
+      const distanceTraveled = projectile.position.distanceTo(startPosition);
+      if (distanceTraveled > maxDistance) {
+        // Remove projectile
+        this.scene.remove(projectile);
+        return;
+      }
+      
+      // Check wall collisions
+      const raycaster = new THREE.Raycaster();
+      raycaster.set(
+        projectile.position.clone().sub(normalizedDirection.clone().multiplyScalar(0.1)),
+        normalizedDirection
+      );
+      const intersects = raycaster.intersectObjects(this.walls);
+      
+      if (intersects.length > 0 && intersects[0].distance < 0.2) {
+        // Hit a wall, create impact effect
+        this.createImpactEffect(projectile.position, normalizedDirection, color);
+        
+        // Remove projectile
+        this.scene.remove(projectile);
+        return;
+      }
+      
+      // Check player collisions (only visual - server handles actual hits)
+      
+      // Continue animation
+      requestAnimationFrame(animateProjectile);
+    };
+    
+    // Start animation
+    animateProjectile();
+  }
+  
+  /**
+   * Create impact effect when projectile hits something
+   */
+  private createImpactEffect(position: THREE.Vector3, direction: THREE.Vector3, color: number): void {
+    // Create splash effect
+    const splash = new THREE.Group();
+    
+    // Create multiple small spheres for splash
+    for (let i = 0; i < 8; i++) {
+      const splat = new THREE.Mesh(
+        new THREE.SphereGeometry(0.03, 4, 4),
+        new THREE.MeshStandardMaterial({
+          color: color,
+          emissive: color,
+          emissiveIntensity: 0.5
+        })
+      );
+      
+      // Random offset from center
+      const randomDirection = new THREE.Vector3(
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1
+      ).normalize();
+      
+      // Bias direction away from surface
+      randomDirection.add(direction.clone().negate()).normalize();
+      
+      // Set position with small random offset
+      splat.position.copy(position).add(randomDirection.multiplyScalar(0.05));
+      
+      splash.add(splat);
+    }
+    
+    // Add to scene
+    this.scene.add(splash);
+    
+    // Remove after short duration
+    setTimeout(() => {
+      this.scene.remove(splash);
+    }, 1000);
   }
   
   /**
