@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { io, Socket } from 'socket.io-client';
-import { GameState, PlayerMovement, PlayerState, SocketEvents } from '../../shared/types';
+import { EntityType, GameState, MapData, PlayerMovement, PlayerState, SocketEvents } from '../../shared/types';
 import { Controls } from './Controls';
 import { Player } from './Player';
+import { MapRenderer } from './core/MapRenderer';
 
 /**
  * Game class for a first-person multiplayer 3D game
@@ -16,7 +17,9 @@ export class Game {
   private localPlayer: Player | null;
   private controls: Controls;
   private lastUpdateTime: number;
-  private ground: THREE.Mesh;
+  private mapRenderer: MapRenderer;
+  private walls: THREE.Object3D[] = [];
+  private teamInfo: HTMLElement | null = null;
 
   /**
    * Initialize the game
@@ -47,74 +50,142 @@ export class Game {
     this.players = new Map();
     this.localPlayer = null;
     
+    // Initialize map renderer
+    this.mapRenderer = new MapRenderer(this.scene);
+    
+    // Create team info display
+    this.createTeamInfo();
+    
     // Set up socket connection
     this.socket = io();
     this.setupSocketEvents();
     
-    // Set up the ground
-    const groundGeometry = new THREE.PlaneGeometry(100, 100);
-    const groundMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0x555555, 
-      side: THREE.DoubleSide
-    });
-    this.ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    this.ground.rotation.x = Math.PI / 2;
-    this.ground.position.y = 0;
-    this.ground.receiveShadow = true;
-    this.scene.add(this.ground);
-    
-    // Add ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    this.scene.add(ambientLight);
-    
-    // Add directional light (sun)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 20, 10);
-    directionalLight.castShadow = true;
-    this.scene.add(directionalLight);
-    
-    // Configure shadow properties
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 500;
-    
-    // Set up window resize handler
+    // Add event listener for window resize
     window.addEventListener('resize', this.onWindowResize.bind(this));
     
-    // Initialize time tracking
-    this.lastUpdateTime = performance.now();
+    // Add lighting to the scene
+    this.addLighting();
     
-    // Start animation loop
+    // Start the animation loop
+    this.lastUpdateTime = performance.now();
     this.animate();
+  }
+
+  /**
+   * Create a UI element to display team information
+   */
+  private createTeamInfo(): void {
+    // Create team info element
+    this.teamInfo = document.createElement('div');
+    this.teamInfo.style.position = 'absolute';
+    this.teamInfo.style.top = '10px';
+    this.teamInfo.style.left = '10px';
+    this.teamInfo.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    this.teamInfo.style.color = 'white';
+    this.teamInfo.style.padding = '10px';
+    this.teamInfo.style.borderRadius = '5px';
+    this.teamInfo.style.fontFamily = 'Arial, sans-serif';
+    this.teamInfo.style.zIndex = '1000';
+    this.teamInfo.innerHTML = 'Waiting for team assignment...';
+    
+    // Add to document
+    document.body.appendChild(this.teamInfo);
+  }
+
+  /**
+   * Update team info display
+   */
+  private updateTeamInfo(): void {
+    if (!this.teamInfo || !this.localPlayer) return;
+    
+    const teamId = this.localPlayer.getTeamId();
+    const teamName = teamId === 1 ? 'Red Team' : 'Blue Team';
+    const teamColor = teamId === 1 ? '#FF3333' : '#3333FF';
+    
+    // Count players on each team
+    let redCount = 0;
+    let blueCount = 0;
+    
+    this.players.forEach(player => {
+      if (player.getTeamId() === 1) {
+        redCount++;
+      } else if (player.getTeamId() === 2) {
+        blueCount++;
+      }
+    });
+    
+    // Update the team info display
+    this.teamInfo.innerHTML = `
+      <div style="margin-bottom: 5px; font-weight: bold; color: ${teamColor};">
+        You are on: ${teamName}
+      </div>
+      <div>Players: Red Team (${redCount}) - Blue Team (${blueCount})</div>
+    `;
   }
 
   /**
    * Set up socket event handlers
    */
   private setupSocketEvents(): void {
-    // Handle initial game state
+    // Handle game state updates
     this.socket.on(SocketEvents.GAME_STATE, (gameState: GameState) => {
       console.log('Received game state:', gameState);
       
-      // Create players from game state
+      // Process players from game state
       gameState.players.forEach(playerState => {
-        if (playerState.id === this.socket.id) {
-          // Create local player
-          this.localPlayer = this.createPlayer(playerState);
+        // Check if this is the local player
+        const isLocalPlayer = playerState.id === this.socket.id;
+        
+        if (isLocalPlayer) {
+          if (!this.localPlayer) {
+            // Create new local player if it doesn't exist
+            this.localPlayer = this.createPlayer(playerState);
+            
+            // Attach camera to local player
+            this.localPlayer.attachCamera(this.camera);
+            
+            // Update team info
+            this.updateTeamInfo();
+          } else {
+            // Update existing local player
+            this.localPlayer.updateFromState(playerState);
+          }
         } else {
-          // Create other players
-          this.createPlayer(playerState);
+          // Handle other players
+          if (this.players.has(playerState.id)) {
+            // Update existing player
+            const player = this.players.get(playerState.id);
+            if (player) {
+              player.updateFromState(playerState);
+            }
+          } else {
+            // Create new player
+            this.createPlayer(playerState);
+          }
         }
       });
+      
+      // If we have map data in the game state, render it
+      if (gameState.map) {
+        this.mapRenderer.renderMap(gameState.map);
+        this.updateWallsList();
+      }
+      
+      // Update team info display
+      this.updateTeamInfo();
     });
     
     // Handle player joined
     this.socket.on(SocketEvents.PLAYER_JOINED, (playerState: PlayerState) => {
       console.log('Player joined:', playerState);
       
-      // Create new player
-      this.createPlayer(playerState);
+      // Create new player if not already created
+      if (!this.players.has(playerState.id)) {
+        this.createPlayer(playerState);
+        
+        // Update team info display
+        this.updateTeamInfo();
+      }
     });
     
     // Handle player moved
@@ -143,7 +214,17 @@ export class Game {
         
         // Remove from map
         this.players.delete(playerId);
+        
+        // Update team info display
+        this.updateTeamInfo();
       }
+    });
+    
+    // Handle dedicated map data updates
+    this.socket.on(SocketEvents.MAP_DATA, (mapData: MapData) => {
+      console.log('Received map data from server:', mapData);
+      this.mapRenderer.renderMap(mapData);
+      this.updateWallsList();
     });
   }
 
@@ -163,6 +244,28 @@ export class Game {
     
     // Return player
     return player;
+  }
+  
+  /**
+   * Update the list of walls for collision detection
+   */
+  private updateWallsList(): void {
+    // Clear the current walls list
+    this.walls = [];
+    
+    // Find all objects in the scene with type WALL
+    this.scene.traverse((object) => {
+      if (object.userData && object.userData.type === EntityType.WALL && object.userData.isCollidable) {
+        this.walls.push(object);
+      }
+    });
+    
+    console.log(`Found ${this.walls.length} walls for collision detection`);
+    
+    // If we have a local player, update its wall references for collision detection
+    if (this.localPlayer) {
+      this.localPlayer.setWalls(this.walls);
+    }
   }
 
   /**
@@ -184,52 +287,56 @@ export class Game {
     // Request next frame
     requestAnimationFrame(this.animate.bind(this));
     
-    // Calculate delta time (in seconds)
+    // Calculate delta time
     const deltaTime = (time - this.lastUpdateTime) / 1000;
     this.lastUpdateTime = time;
     
-    // Update local player movement and rotation
-    if (this.localPlayer && this.socket.id) {
-      // Get movement input
+    // Update controls
+    this.controls.update(deltaTime);
+    
+    // Update local player if exists
+    if (this.localPlayer) {
+      // Update player using controls
       const movement = this.controls.getMovement();
+      const shouldEmit = this.localPlayer.update(deltaTime, movement, this.walls);
       
-      // Apply movement to local player
-      if (movement.forward || movement.backward || movement.left || movement.right) {
-        this.localPlayer.move(
-          movement.forward, 
-          movement.backward, 
-          movement.left, 
-          movement.right, 
-          deltaTime
-        );
+      // Emit player movement if changed
+      if (shouldEmit) {
+        this.socket.emit(SocketEvents.PLAYER_MOVED, {
+          playerId: this.socket.id,
+          position: this.localPlayer.getPosition(),
+          rotation: this.localPlayer.getRotation()
+        });
       }
-
-      // Apply rotation from mouse input
-      if (movement.mouseX !== 0 || movement.mouseY !== 0) {
-        this.localPlayer.rotate(movement.mouseX, movement.mouseY);
-      }
-
-      // Position camera for first-person view
-      const playerPos = this.localPlayer.getPosition();
-      const playerRot = this.localPlayer.getRotation();
-      
-      // Position camera at player's head
-      this.camera.position.set(playerPos.x, playerPos.y + 1.7, playerPos.z);
-      
-      // Apply player rotation to camera
-      this.camera.rotation.order = 'YXZ'; // Important for FPS camera
-      this.camera.rotation.y = playerRot.y;
-      this.camera.rotation.x = playerRot.x;
-      
-      // Send position and rotation update to server
-      this.socket.emit(SocketEvents.PLAYER_MOVED, {
-        playerId: this.socket.id,
-        position: this.localPlayer.getPosition(),
-        rotation: this.localPlayer.getRotation()
-      });
     }
     
-    // Render the scene
+    // Render scene
     this.renderer.render(this.scene, this.camera);
+  }
+  
+  /**
+   * Add lighting to the scene
+   */
+  private addLighting(): void {
+    // Add ambient light
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    this.scene.add(ambientLight);
+    
+    // Add directional light (sun)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 20, 10);
+    directionalLight.castShadow = true;
+    
+    // Set up shadow properties
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 50;
+    directionalLight.shadow.camera.left = -25;
+    directionalLight.shadow.camera.right = 25;
+    directionalLight.shadow.camera.top = 25;
+    directionalLight.shadow.camera.bottom = -25;
+    
+    this.scene.add(directionalLight);
   }
 } 

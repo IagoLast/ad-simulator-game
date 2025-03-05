@@ -15,10 +15,48 @@
         canvas {
             display: block;
         }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            z-index: 5;
+            pointer-events: none;
+            /* Ensures it doesn't interfere with mouse events */
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: "";
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+
+        #crosshair::before {
+            /* Horizontal line */
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+        }
+
+        #crosshair::after {
+            /* Vertical line */
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            top: 0;
+            transform: translateX(-50%);
+        }
     </style>
 </head>
 
 <body>
+    <div id="crosshair"></div>
     <script src="/socket.io/socket.io.js"></script>
     <script src="bundle.js"></script>
 </body>

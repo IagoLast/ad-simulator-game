@@ -13,13 +13,70 @@ export interface PlayerState {
     y: number;
   };
   color: string;
+  teamId: number; // Team 1 or Team 2
 }
 
 /**
- * Game state containing all players
+ * Entity types in the game
+ */
+export enum EntityType {
+  WALL = 'wall',
+  EXIT = 'exit'
+}
+
+/**
+ * Base interface for all map entities
+ */
+export interface MapEntity {
+  type: EntityType;
+  position: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  dimensions?: {
+    width: number;
+    height: number;
+    depth: number;
+  };
+  rotation?: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  teamId?: number; // Used for team-specific exits
+}
+
+/**
+ * Wall entity with collision
+ */
+export interface Wall extends MapEntity {
+  type: EntityType.WALL;
+}
+
+/**
+ * Exit entity (goal for a team)
+ */
+export interface Exit extends MapEntity {
+  type: EntityType.EXIT;
+  teamId: number; // Required for exits
+}
+
+/**
+ * Map data containing all entities
+ */
+export interface MapData {
+  width: number;
+  height: number;
+  entities: MapEntity[];
+}
+
+/**
+ * Game state containing all players and map data
  */
 export interface GameState {
   players: PlayerState[];
+  map?: MapData;
 }
 
 /**
@@ -31,6 +88,7 @@ export enum SocketEvents {
   PLAYER_LEFT = 'player_left',
   PLAYER_MOVED = 'player_moved',
   GAME_STATE = 'game_state',
+  MAP_DATA = 'map_data',
 }
 
 /**

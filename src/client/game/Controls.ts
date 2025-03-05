@@ -53,12 +53,15 @@ export class Controls {
    * Handle key down events
    */
   private onKeyDown(event: KeyboardEvent): void {
-    // Store key state (lowercase for consistency)
-    this.keys[event.key.toLowerCase()] = true;
+    // Only handle key press if pointer is locked
+    if (!this.isPointerLocked) {
+      return;
+    }
     
-    // Prevent scrolling with WASD
-    if (['w', 'a', 's', 'd'].includes(event.key.toLowerCase())) {
-      event.preventDefault();
+    // Update key state
+    const key = event.key.toLowerCase();
+    if (['w', 'a', 's', 'd'].includes(key)) {
+      this.keys[key] = true;
     }
   }
   
@@ -66,19 +69,24 @@ export class Controls {
    * Handle key up events
    */
   private onKeyUp(event: KeyboardEvent): void {
-    // Store key state (lowercase for consistency)
-    this.keys[event.key.toLowerCase()] = false;
+    const key = event.key.toLowerCase();
+    if (['w', 'a', 's', 'd'].includes(key)) {
+      this.keys[key] = false;
+    }
   }
   
   /**
    * Handle mouse movement
    */
   private onMouseMove(event: MouseEvent): void {
-    if (this.isPointerLocked) {
-      // Get mouse movement (not position)
-      this.mouseX = event.movementX * this.mouseSensitivity;
-      this.mouseY = event.movementY * this.mouseSensitivity;
+    // Only handle mouse movement if pointer is locked
+    if (!this.isPointerLocked) {
+      return;
     }
+    
+    // Apply mouse sensitivity
+    this.mouseX = event.movementX;
+    this.mouseY = event.movementY;
   }
   
   /**
@@ -98,11 +106,23 @@ export class Controls {
   }
   
   /**
+   * Update controls state (can be called each frame)
+   * @param deltaTime Time elapsed since last frame in seconds
+   */
+  public update(deltaTime: number): void {
+    // Reset mouse movement after each frame
+    // This prevents continuous rotation when mouse is not moving
+    setTimeout(() => {
+      this.mouseX = 0;
+      this.mouseY = 0;
+    }, 0);
+  }
+  
+  /**
    * Get the current movement input (including mouse)
    */
   public getMovement(): MovementInput {
-    // Reset mouse movement after it's been consumed
-    const result = {
+    return {
       forward: this.isKeyPressed('w'),
       backward: this.isKeyPressed('s'),
       left: this.isKeyPressed('a'),
@@ -110,12 +130,6 @@ export class Controls {
       mouseX: this.mouseX,
       mouseY: this.mouseY
     };
-    
-    // Reset mouse deltas after they've been used
-    this.mouseX = 0;
-    this.mouseY = 0;
-    
-    return result;
   }
   
   /**
