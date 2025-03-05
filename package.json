@@ -10,6 +10,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/node": "^22.13.9",
     "three": "^0.157.0"
   },
   "devDependencies": {
@@ -17,4 +18,4 @@
     "typescript": "^5.2.2",
     "vite": "^4.4.9"
   }
-} 
+}
