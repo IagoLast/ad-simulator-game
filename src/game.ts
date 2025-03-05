@@ -7,6 +7,9 @@ import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockCont
 import { GameState } from './types';
 import { Flag } from './classes/Flag';
 
+// Flag capture timer configuration
+const FLAG_CAPTURE_TIME_LIMIT = 60; // Time in seconds to capture the flag (1 minute)
+
 // Game state
 const gameState: GameState = {
   health: 100,
@@ -40,6 +43,10 @@ let flag: Flag;
 
 // Flag captured notification element
 let flagNotification: HTMLElement | null;
+let timerElement: HTMLElement | null;
+let flagCaptureTimer: number = FLAG_CAPTURE_TIME_LIMIT;
+let flagTimerActive: boolean = false;
+let lastTimerUpdate: number = 0;
 
 // Bot spawning variables
 let lastBotSpawnTime = 0;
@@ -108,6 +115,23 @@ function setupEventListeners(): void {
   flagNotification.style.fontFamily = 'Arial, sans-serif';
   flagNotification.style.display = 'none';
   document.body.appendChild(flagNotification);
+  
+  // Create timer element (make it visible from the start)
+  timerElement = document.createElement('div');
+  timerElement.id = 'flag-timer';
+  timerElement.style.position = 'absolute';
+  timerElement.style.top = '10px';
+  timerElement.style.left = '50%';
+  timerElement.style.transform = 'translateX(-50%)';
+  timerElement.style.background = 'rgba(0,0,0,0.7)';
+  timerElement.style.color = 'white';
+  timerElement.style.padding = '10px 20px';
+  timerElement.style.borderRadius = '5px';
+  timerElement.style.fontFamily = 'Arial, sans-serif';
+  timerElement.style.fontSize = '24px';
+  timerElement.style.fontWeight = 'bold';
+  timerElement.style.display = 'block'; // Make it visible immediately
+  document.body.appendChild(timerElement);
   
   if (!instructions || !crosshair) return;
 
@@ -402,6 +426,9 @@ function animate(): void {
     weaponManager.update(delta);
   }
   
+  // Update flag timer
+  updateFlagTimer();
+  
   // Handle flag interaction
   handleFlagInteraction();
   
@@ -491,7 +518,17 @@ function init(): void {
   // Create flag after obstacles are created
   createFlag();
   
-  // Start animation loop
+  // Start the flag timer when the game starts
+  flagCaptureTimer = FLAG_CAPTURE_TIME_LIMIT;
+  flagTimerActive = true;
+  lastTimerUpdate = Date.now();
+  
+  // Show the timer immediately
+  if (timerElement) {
+    timerElement.style.display = 'block';
+    updateTimerDisplay();
+  }
+  
   animate();
 }
 
@@ -617,7 +654,9 @@ function handleFlagInteraction(): void {
   // Check if player can capture the flag
   if (!flag.isCaptured && flag.canCapture(playerPosition)) {
     flag.capture();
-    showFlagNotification("Flag captured! Get to the exit!");
+    showFlagNotification(`Flag captured! Get to the exit before time runs out!`);
+    
+    // No longer starting the timer here since it already started with the game
   }
   
   // Update flag position when captured
@@ -631,6 +670,46 @@ function handleFlagInteraction(): void {
       showWinScreen();
     }
   }
+}
+
+// Update the timer countdown
+function updateFlagTimer(): void {
+  if (!flagTimerActive) return;
+  
+  const now = Date.now();
+  const deltaTime = (now - lastTimerUpdate) / 1000; // Convert to seconds
+  lastTimerUpdate = now;
+  
+  flagCaptureTimer -= deltaTime;
+  
+  // Update timer display
+  updateTimerDisplay();
+  
+  // Check if time ran out
+  if (flagCaptureTimer <= 0) {
+    // Time's up - game over
+    flagTimerActive = false;
+    showGameOverScreen();
+  }
+}
+
+// Update the timer display
+function updateTimerDisplay(): void {
+  if (!timerElement) return;
+  
+  // Format time as M:SS
+  const minutes = Math.floor(flagCaptureTimer / 60);
+  const seconds = Math.floor(flagCaptureTimer % 60);
+  const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  
+  // Change color to red when time is running low
+  if (flagCaptureTimer <= 10) {
+    timerElement.style.color = '#ff0000';
+  } else {
+    timerElement.style.color = 'white';
+  }
+  
+  timerElement.textContent = formattedTime;
 }
 
 // Show flag notification
@@ -648,8 +727,74 @@ function showFlagNotification(message: string): void {
   }, 5000);
 }
 
+// Show game over screen
+function showGameOverScreen(): void {
+  // Create a game over notification
+  const gameOverScreen = document.createElement('div');
+  gameOverScreen.style.position = 'absolute';
+  gameOverScreen.style.top = '0';
+  gameOverScreen.style.left = '0';
+  gameOverScreen.style.width = '100%';
+  gameOverScreen.style.height = '100%';
+  gameOverScreen.style.background = 'rgba(0,0,0,0.8)';
+  gameOverScreen.style.display = 'flex';
+  gameOverScreen.style.flexDirection = 'column';
+  gameOverScreen.style.justifyContent = 'center';
+  gameOverScreen.style.alignItems = 'center';
+  gameOverScreen.style.color = 'white';
+  gameOverScreen.style.fontFamily = 'Arial, sans-serif';
+  gameOverScreen.style.zIndex = '1000';
+  
+  const title = document.createElement('h1');
+  title.textContent = 'TIME\'S UP!';
+  title.style.fontSize = '5rem';
+  title.style.marginBottom = '20px';
+  title.style.color = '#FF3333'; // Red color
+  
+  const message = document.createElement('p');
+  message.textContent = 'You ran out of time! Find and capture the flag faster next time!';
+  message.style.fontSize = '1.5rem';
+  message.style.marginBottom = '40px';
+  
+  const restartButton = document.createElement('button');
+  restartButton.textContent = 'Try Again';
+  restartButton.style.padding = '15px 30px';
+  restartButton.style.fontSize = '1.2rem';
+  restartButton.style.background = '#4CAF50';
+  restartButton.style.border = 'none';
+  restartButton.style.borderRadius = '5px';
+  restartButton.style.cursor = 'pointer';
+  
+  restartButton.addEventListener('click', () => {
+    document.body.removeChild(gameOverScreen);
+    restartGame();
+  });
+  
+  gameOverScreen.appendChild(title);
+  gameOverScreen.appendChild(message);
+  gameOverScreen.appendChild(restartButton);
+  
+  document.body.appendChild(gameOverScreen);
+  
+  // Unlock controls when showing game over screen
+  controls.unlock();
+  
+  // Hide the timer
+  if (timerElement) {
+    timerElement.style.display = 'none';
+  }
+}
+
 // Show win screen
 function showWinScreen(): void {
+  // Stop the timer
+  flagTimerActive = false;
+  
+  // Hide the timer
+  if (timerElement) {
+    timerElement.style.display = 'none';
+  }
+  
   // Create a win notification
   const winScreen = document.createElement('div');
   winScreen.style.position = 'absolute';
@@ -701,12 +846,9 @@ function showWinScreen(): void {
   controls.unlock();
 }
 
-/**
- * Restarts the game.
- * For now just performs a window reload.
- * Future versions should include a proper game restart.
- */
+// Restart the game
 function restartGame(): void {
+  // Simply reload the page to restart everything
   window.location.reload();
 }
 
