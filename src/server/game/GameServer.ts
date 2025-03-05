@@ -709,9 +709,6 @@ export class GameServer {
     
     // Convert null to undefined for GameState properties that expect number | undefined
     this.gameState.winningTeam = this.winningTeam === null ? undefined : this.winningTeam;
-    
-    // Broadcast updated game state to all clients
-    this.io.emit(SocketEvents.GAME_STATE, this.gameState);
   }
   
   /**

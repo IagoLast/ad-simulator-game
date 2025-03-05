@@ -292,7 +292,7 @@ export class Game {
         if (isLocalPlayer) {
           if (!this.localPlayer) {
             // Create new local player if it doesn't exist
-            this.localPlayer = this.createPlayer(playerState);
+          this.localPlayer = this.createPlayer(playerState);
             
             // Attach camera to local player
             this.localPlayer.attachCamera(this.camera);
@@ -313,7 +313,7 @@ export class Game {
             }
           } else {
             // Create new player
-            this.createPlayer(playerState);
+          this.createPlayer(playerState);
           }
         }
       });
@@ -344,9 +344,9 @@ export class Game {
       
       // Remove player from the scene
       if (this.players.has(playerId)) {
-        const player = this.players.get(playerId);
-        if (player) {
-          this.scene.remove(player.mesh);
+      const player = this.players.get(playerId);
+      if (player) {
+        this.scene.remove(player.mesh);
         }
         this.players.delete(playerId);
       }
@@ -632,7 +632,7 @@ export class Game {
     
     // Add player to collection if not local player
     if (!isLocalPlayer) {
-      this.players.set(playerState.id, player);
+    this.players.set(playerState.id, player);
     }
     
     return player;
@@ -663,7 +663,7 @@ export class Game {
       this.localPlayer.setWalls(this.walls);
     }
   }
-  
+
   /**
    * Handle window resize
    */
@@ -675,7 +675,7 @@ export class Game {
     // Update renderer size
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
-  
+
   /**
    * Animation loop
    */
@@ -694,8 +694,8 @@ export class Game {
     
     // Update controls and get input state
     this.controls.update(deltaTime);
-    const movement = this.controls.getMovement();
-    
+      const movement = this.controls.getMovement();
+      
     // Update local player if exists
     if (this.localPlayer && !this.gameOver) {
       // Ensure flag visibility is correct
@@ -747,11 +747,11 @@ export class Game {
         const position = this.localPlayer.getPosition();
         const rotation = this.localPlayer.getRotation();
         
-        this.socket.emit(SocketEvents.PLAYER_MOVED, {
-          playerId: this.socket.id,
+      this.socket.emit(SocketEvents.PLAYER_MOVED, {
+        playerId: this.socket.id,
           position,
           rotation
-        });
+      });
       }
     }
     
