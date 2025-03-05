@@ -1,16 +1,12 @@
 import * as THREE from 'three';
-import { Bot } from './Bot';
 import { Obstacle } from '../types';
+import { Bot } from './Bot';
 import { BaseProjectile } from './projectiles/BaseProjectile';
-import { WeaponManager } from './WeaponManager';
 
 export class BotManager {
   public bots: Bot[] = [];
   private scene: THREE.Scene;
   private maxBots: number = 10;
-  private obstacles: Obstacle[] = [];
-  private weaponManager: WeaponManager | null = null;
-  private playerRef: THREE.Object3D | null = null;
   
   constructor(scene: THREE.Scene) {
     this.scene = scene;

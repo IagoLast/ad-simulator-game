@@ -3,7 +3,7 @@ import { Ad, SimpleAdStyle } from "../classes/ads/Ad";
 import { ColorfulAdStyle } from "../classes/ColorfulAdStyle";
 import { WallAdStyle } from "../classes/ads/WallAdStyle";
 import { Obstacle } from "../types";
-import { AdPosition } from "../classes/MazeGenerator";
+import { AdPosition } from "./MazeGenerator";
 
 /**
  * Manages all advertisements in the game world
@@ -14,10 +14,6 @@ export class AdManager {
     // URLs and domains
     "www.TimeTime.in",
     "www.TheirStack.com",
-    "www.GiantWallAds.com",
-    "www.HugeDisplays.io",
-    "www.MegaAdvert.net",
-    "www.VisitNow.org",
   ];
   private scene: THREE.Scene;
   private adPositions: AdPosition[] = [];
