@@ -52,9 +52,6 @@ export class Game {
     this.socket = io();
     this.setupSocketEvents();
     
-    // Get player count element
-    this.playerCount = document.getElementById('player-count') as HTMLElement;
-    
     // Set up the ground
     const groundGeometry = new THREE.PlaneGeometry(100, 100);
     const groundMaterial = new THREE.MeshBasicMaterial({ 

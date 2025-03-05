@@ -95,12 +95,6 @@ export class Controls {
    */
   private onPointerLockChange(): void {
     this.isPointerLocked = document.pointerLockElement === this.canvas;
-    
-    // Display pointer lock message
-    const pointerLockMessage = document.getElementById('pointer-lock-message');
-    if (pointerLockMessage) {
-      pointerLockMessage.style.display = this.isPointerLocked ? 'none' : 'block';
-    }
   }
   
   /**

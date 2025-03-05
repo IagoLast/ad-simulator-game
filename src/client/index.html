@@ -1,59 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Multiplayer FPS Game</title>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
+        body {
+            margin: 0;
+            overflow: hidden;
             font-family: Arial, sans-serif;
         }
-        canvas { 
-            display: block; 
-        }
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 14px;
-            z-index: 10;
-        }
-        #pointer-lock-message {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 5px;
-            font-size: 16px;
-            text-align: center;
-            z-index: 20;
+
+        canvas {
+            display: block;
         }
     </style>
 </head>
+
 <body>
-    <div id="info">
-        <h3>3D Multiplayer FPS Game</h3>
-        <p>Controls: WASD to move, Mouse to look around</p>
-        <div id="player-count">Players: 0</div>
-    </div>
-    
-    <div id="pointer-lock-message">
-        <h2>First Person Controls</h2>
-        <p>Click anywhere to enable first-person controls</p>
-        <p>WASD - Move, Mouse - Look around</p>
-        <p>ESC - Release mouse</p>
-    </div>
-    
     <script src="/socket.io/socket.io.js"></script>
     <script src="bundle.js"></script>
 </body>
-</html> 
+
+</html>
