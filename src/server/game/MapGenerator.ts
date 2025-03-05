@@ -19,6 +19,20 @@ export class MapGenerator {
     "www.theirstack.com"
   ];
   
+  // Different billboard types/configurations
+  private billboardTypes = [
+    // Standard (vertical)
+    { width: 5, height: 3, depth: 0.2, yOffset: 1.5 },
+    // Landscape (horizontal)
+    { width: 6, height: 2, depth: 0.2, yOffset: 1.0 },
+    // Square
+    { width: 3, height: 3, depth: 0.2, yOffset: 1.5 },
+    // Tall/Narrow
+    { width: 2, height: 4, depth: 0.2, yOffset: 2.0 },
+    // Short/Wide
+    { width: 7, height: 1.5, depth: 0.2, yOffset: 0.75 }
+  ];
+  
   /**
    * Create a new MapGenerator
    * @param width Width of the map (in grid units)
@@ -562,10 +576,6 @@ export class MapGenerator {
    * @param entities Array of map entities to add billboards to
    */
   private addBillboards(entities: MapEntity[]): void {
-    const billboardHeight = 3;
-    const billboardWidth = 5;
-    const billboardDepth = 0.2;
-    
     // Define central square dimensions to avoid placing billboards there
     const centralSquareSize = 15;
     const centralSquareHalfSize = centralSquareSize / 2;
@@ -588,10 +598,63 @@ export class MapGenerator {
       }
     ];
     
-    // Add billboards at strategic locations
-    const numBillboards = 10; // Number of billboards to add
+    // Create a list of all wall positions and dimensions to check for collisions
+    const obstacles: Array<{ minX: number, maxX: number, minZ: number, maxZ: number }> = [];
     
-    for (let i = 0; i < numBillboards; i++) {
+    // Add walls to obstacle list
+    entities.forEach(entity => {
+      if (entity.type === EntityType.WALL || entity.type === EntityType.BILLBOARD) {
+        const { width = 0, depth = 0 } = entity.dimensions || { width: 0, depth: 0 };
+        const halfWidth = width / 2;
+        const halfDepth = depth / 2;
+        const { x = 0, z = 0 } = entity.position || { x: 0, z: 0 };
+        
+        // Add margin around obstacles to prevent close placement
+        const margin = 1.5; // Minimum distance between objects
+        
+        // Add to obstacle list with rotation consideration
+        // For simplicity, we use a bounding box approach
+        const rotationY = entity.rotation?.y || 0;
+        
+        // If rotation is close to 0 or PI (aligned with axes)
+        if (Math.abs(Math.sin(rotationY)) < 0.3) {
+          obstacles.push({
+            minX: x - halfWidth - margin,
+            maxX: x + halfWidth + margin,
+            minZ: z - halfDepth - margin,
+            maxZ: z + halfDepth + margin
+          });
+        } 
+        // If rotation is close to PI/2 or 3PI/2 (perpendicular to axes)
+        else if (Math.abs(Math.cos(rotationY)) < 0.3) {
+          obstacles.push({
+            minX: x - halfDepth - margin, 
+            maxX: x + halfDepth + margin,
+            minZ: z - halfWidth - margin,
+            maxZ: z + halfWidth + margin
+          });
+        }
+        // For arbitrary rotation, use a conservative circular bounding area
+        else {
+          const radius = Math.max(halfWidth, halfDepth) + margin;
+          obstacles.push({
+            minX: x - radius,
+            maxX: x + radius,
+            minZ: z - radius,
+            maxZ: z + radius
+          });
+        }
+      }
+    });
+    
+    // Add billboards at strategic locations
+    const billboardCount = 25; // Increased number of billboards
+    let placedBillboards = 0;
+    let totalAttempts = 0;
+    
+    while (placedBillboards < billboardCount && totalAttempts < 200) {
+      totalAttempts++;
+      
       // Choose a random position that's not in the central square or team exit areas
       let x, z;
       let validPosition = false;
@@ -616,8 +679,34 @@ export class MapGenerator {
           z > area.minZ && z < area.maxZ
         );
         
-        // Position is valid if it's not in central square or team exit areas
-        if (!inCentralSquare && !inTeamExitAreas) {
+        // Choose a random billboard type for collision checking
+        const billboardType = this.billboardTypes[Math.floor(Math.random() * this.billboardTypes.length)];
+        const { width, height, depth } = billboardType;
+        
+        // Check collision with obstacles
+        const collisionWithObstacle = obstacles.some(obstacle => {
+          // Simple AABB collision check (bounding box)
+          const halfWidth = width / 2;
+          const halfDepth = depth / 2;
+          const margin = 0.5; // Additional small margin
+          
+          // Billboard bounding box
+          const billboardMinX = x - halfWidth - margin;
+          const billboardMaxX = x + halfWidth + margin;
+          const billboardMinZ = z - halfDepth - margin;
+          const billboardMaxZ = z + halfDepth + margin;
+          
+          // Check if billboard intersects with obstacle
+          return !(
+            billboardMaxX < obstacle.minX ||
+            billboardMinX > obstacle.maxX ||
+            billboardMaxZ < obstacle.minZ ||
+            billboardMinZ > obstacle.maxZ
+          );
+        });
+        
+        // Position is valid if it's not in central square, not in team exit areas, and not colliding with obstacles
+        if (!inCentralSquare && !inTeamExitAreas && !collisionWithObstacle) {
           validPosition = true;
         }
       }
@@ -627,17 +716,113 @@ export class MapGenerator {
       // Choose a random text from the available options
       const text = this.billboardTexts[Math.floor(Math.random() * this.billboardTexts.length)];
       
-      // Random rotation (0, 90, 180, or 270 degrees)
-      const rotationY = Math.floor(Math.random() * 4) * (Math.PI / 2);
+      // Choose a random billboard type
+      const billboardType = this.billboardTypes[Math.floor(Math.random() * this.billboardTypes.length)];
+      const { width, height, depth, yOffset } = billboardType;
       
-      // Add the billboard
+      // Arbitrary rotation (any angle between 0 and 360 degrees)
+      const rotationY = Math.random() * Math.PI * 2;
+      
+      // Create the billboard
+      const billboard = {
+        type: EntityType.BILLBOARD,
+        position: { x: x!, y: yOffset, z: z! },
+        dimensions: { width, height, depth },
+        rotation: { x: 0, y: rotationY, z: 0 },
+        text: text,
+      } as Billboard;
+      
+      // Add the billboard to entities
+      entities.push(billboard);
+      
+      // Add this billboard to obstacles list to prevent future overlaps
+      const halfWidth = width / 2;
+      const halfDepth = depth / 2;
+      const margin = 1.5; // Minimum distance between objects
+      
+      obstacles.push({
+        minX: x! - halfWidth - margin,
+        maxX: x! + halfWidth + margin,
+        minZ: z! - halfDepth - margin,
+        maxZ: z! + halfDepth + margin
+      });
+      
+      placedBillboards++;
+    }
+    
+    // Add a few directional billboards pointing toward the flag
+    this.addDirectionalBillboards(entities, centralSquareMin, centralSquareMax, obstacles);
+  }
+  
+  /**
+   * Add directional billboards pointing toward the flag
+   * @param entities Array of map entities to add billboards to
+   * @param centralSquareMin Minimum coordinate of central square
+   * @param centralSquareMax Maximum coordinate of central square
+   * @param obstacles List of obstacle positions to avoid
+   */
+  private addDirectionalBillboards(
+    entities: MapEntity[], 
+    centralSquareMin: number, 
+    centralSquareMax: number,
+    obstacles: Array<{ minX: number, maxX: number, minZ: number, maxZ: number }>
+  ): void {
+    // Place 4 "FLAG THIS WAY" billboards around the central area, one in each quadrant
+    const flagDirections = [
+      // Northeast quadrant
+      { x: centralSquareMax + 5, z: centralSquareMax + 5, rotation: Math.PI * 0.75 },
+      // Northwest quadrant
+      { x: centralSquareMin - 5, z: centralSquareMax + 5, rotation: Math.PI * 0.25 },
+      // Southwest quadrant
+      { x: centralSquareMin - 5, z: centralSquareMin - 5, rotation: Math.PI * 1.75 },
+      // Southeast quadrant
+      { x: centralSquareMax + 5, z: centralSquareMin - 5, rotation: Math.PI * 1.25 }
+    ];
+    
+    const width = 4;
+    const depth = 0.2;
+    
+    for (const direction of flagDirections) {
+      // Check for collision with obstacles
+      const isColliding = obstacles.some(obstacle => {
+        // Simple bounding box collision check
+        const halfWidth = width / 2;
+        const halfDepth = depth / 2;
+        const margin = 0.5;
+        
+        // Billboard bounding box
+        const billboardMinX = direction.x - halfWidth - margin;
+        const billboardMaxX = direction.x + halfWidth + margin;
+        const billboardMinZ = direction.z - halfDepth - margin;
+        const billboardMaxZ = direction.z + halfDepth + margin;
+        
+        // Check if billboard intersects with obstacle
+        return !(
+          billboardMaxX < obstacle.minX ||
+          billboardMinX > obstacle.maxX ||
+          billboardMaxZ < obstacle.minZ ||
+          billboardMinZ > obstacle.maxZ
+        );
+      });
+      
+      // Skip if there's a collision
+      if (isColliding) continue;
+      
       entities.push({
         type: EntityType.BILLBOARD,
-        position: { x: x!, y: billboardHeight / 2, z: z! },
-        dimensions: { width: billboardWidth, height: billboardHeight, depth: billboardDepth },
-        rotation: { x: 0, y: rotationY, z: 0 },
-        text: text
+        position: { x: direction.x, y: 1.5, z: direction.z },
+        dimensions: { width, height: 2, depth },
+        rotation: { x: 0, y: direction.rotation, z: 0 },
+        text: "↑ FLAG ↑"
       } as Billboard);
+      
+      // Add to obstacles list
+      obstacles.push({
+        minX: direction.x - width / 2 - 1.5,
+        maxX: direction.x + width / 2 + 1.5,
+        minZ: direction.z - depth / 2 - 1.5,
+        maxZ: direction.z + depth / 2 + 1.5
+      });
     }
   }
   
