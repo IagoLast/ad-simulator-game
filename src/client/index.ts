@@ -4,6 +4,6 @@ import { Game } from './game/Game';
 window.addEventListener('DOMContentLoaded', () => {
   // Create the game (constructor starts animation)
   if(window.location.pathname !== '/') {
-    const game = new Game();
+    const game = new Game(window.location.pathname);
   }
 }); 

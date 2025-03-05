@@ -31,7 +31,7 @@ export class Game {
   /**
    * Create a new game instance
    */
-  constructor() {
+  constructor(namespace: string) {
     // Initialize scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87CEEB); // Sky blue background
@@ -60,8 +60,6 @@ export class Game {
     this.mapRenderer = new MapRenderer(this.scene);
     
     // Initialize socket connection using the current path as namespace
-    const currentPath = window.location.pathname;
-    const namespace = currentPath === '/' ? '' : currentPath; // Use namespace if not on root path
     this.socket = io(namespace);
     
     // Initialize players collection
