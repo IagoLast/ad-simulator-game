@@ -393,10 +393,20 @@ export class Game {
       const teamName = data.teamId === 1 ? 'Red Team' : 'Blue Team';
       const teamColor = data.teamId === 1 ? '#FF3333' : '#3333FF';
       
+      // First, clear any flag from ALL players to prevent duplication
+      if (this.localPlayer) {
+        this.localPlayer.setHasFlag(false);
+      }
+      
+      for (const [id, player] of this.players.entries()) {
+        player.setHasFlag(false);
+      }
+      
+      // Then set the flag on the correct player
       if (isLocalPlayer) {
         this.showGameMessage('You captured the flag! Return to your base!', 'gold', 4000);
         
-        // Update local player flag status directly
+        // Update local player flag status
         if (this.localPlayer) {
           console.log('[FLAG DEBUG] Setting local player hasFlag to true');
           this.localPlayer.setHasFlag(true);
@@ -702,6 +712,19 @@ export class Game {
             console.log(`[FLAG DEBUG] Remote player ${this.flagCarrier} should have flag but doesn't - fixing`);
             carrier.setHasFlag(true);
           }
+        }
+      } else {
+        // Make sure no player has a flag when there's no carrier
+        for (const [id, player] of this.players.entries()) {
+          if (player.isCarryingFlag()) {
+            console.log(`[FLAG DEBUG] Player ${id} shouldn't have flag but does - fixing`);
+            player.setHasFlag(false);
+          }
+        }
+        
+        if (this.localPlayer.isCarryingFlag()) {
+          console.log(`[FLAG DEBUG] Local player shouldn't have flag but does - fixing`);
+          this.localPlayer.setHasFlag(false);
         }
       }
       

@@ -583,21 +583,25 @@ export class Player {
     }
     
     // Create flag pole
-    const poleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8);
-    const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+    const poleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 2.0, 8);
+    const poleMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x8B4513,
+      emissive: 0x3d1c02,
+      emissiveIntensity: 0.3
+    });
     const pole = new THREE.Mesh(poleGeometry, poleMaterial);
     pole.castShadow = true;
     
     // Create flag
-    const flagGeometry = new THREE.PlaneGeometry(0.8, 0.6);
+    const flagGeometry = new THREE.PlaneGeometry(1.2, 0.8);
     const flagMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xFFD700, // Gold flag
       side: THREE.DoubleSide,
       emissive: 0xFFA500, // Orange emissive color to make it glow
-      emissiveIntensity: 0.5 // Strong glow
+      emissiveIntensity: 0.8 // Stronger glow
     });
     const flagMesh = new THREE.Mesh(flagGeometry, flagMaterial);
-    flagMesh.position.set(0.3, 0.6, 0);
+    flagMesh.position.set(0.4, 0.7, 0);
     flagMesh.castShadow = true;
     
     // Create flag group
@@ -605,19 +609,19 @@ export class Player {
     this.flag.add(pole);
     this.flag.add(flagMesh);
     
+    // Position differently based on whether it's the local or remote player
+    if (this.isLocalPlayer) {
+      // Position for local player - slightly behind and to the side
+      this.flag.position.set(-0.3, 0, -0.5);
+    } else {
+      // Position for remote players - more visible on top
+      this.flag.position.set(0, 0.8, 0);
+      // Scale up for better visibility
+      this.flag.scale.set(1.5, 1.5, 1.5);
+    }
+    
     // Add to player mesh
     this.mesh.add(this.flag);
-    
-    // Position and scale differently based on local vs remote player
-    if (this.isLocalPlayer) {
-      // For local player, make it less obtrusive
-      this.flag.position.set(0, 0.5, 0.3); // Up and back
-      this.flag.scale.set(0.4, 0.4, 0.4);
-    } else {
-      // For other players, make it very visible
-      this.flag.position.set(0, 1.5, 0); // Above the player's head
-      this.flag.scale.set(1.0, 1.0, 1.0); // Larger size
-    }
     
     // Set flag status
     this.hasFlag = true;
