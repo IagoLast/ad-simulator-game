@@ -256,19 +256,30 @@ export class Player {
     
     // Check if flag status has changed
     const newHasFlag = playerState.hasFlag || false;
-    console.log(`Player ${this.id} flag status update - old: ${this.hasFlag}, new: ${newHasFlag}`);
+    console.log(`[FLAG DEBUG] Player ${this.id} flag status update - old: ${this.hasFlag}, new: ${newHasFlag} (isLocalPlayer: ${this.isLocalPlayer})`);
     
-    // Always synchronize hasFlag visual state, even if the property hasn't changed
-    // This ensures consistency in case the visual doesn't match the state
-    this.hasFlag = newHasFlag;
-    
-    // Synchronize flag visualization with flag state
-    if (this.hasFlag && !this.flag) {
-      console.log(`Player ${this.id} should have flag but doesn't - adding visual`);
-      this.addFlagToPlayer();
-    } else if (!this.hasFlag && this.flag) {
-      console.log(`Player ${this.id} shouldn't have flag but does - removing visual`);
-      this.removeFlagFromPlayer();
+    // Update flag status
+    if (this.hasFlag !== newHasFlag) {
+      console.log(`[FLAG DEBUG] Player ${this.id} flag status changed from ${this.hasFlag} to ${newHasFlag}`);
+      this.hasFlag = newHasFlag;
+      
+      // Update flag visual
+      if (this.hasFlag) {
+        console.log(`[FLAG DEBUG] Adding flag to player ${this.id}`);
+        this.addFlagToPlayer();
+      } else {
+        console.log(`[FLAG DEBUG] Removing flag from player ${this.id}`);
+        this.removeFlagFromPlayer();
+      }
+    } else {
+      // Even if the flag status hasn't changed, ensure visual state matches
+      if (this.hasFlag && !this.flag) {
+        console.log(`[FLAG DEBUG] Player ${this.id} should have flag but visual is missing - adding flag`);
+        this.addFlagToPlayer();
+      } else if (!this.hasFlag && this.flag) {
+        console.log(`[FLAG DEBUG] Player ${this.id} shouldn't have flag but visual exists - removing flag`);
+        this.removeFlagFromPlayer();
+      }
     }
     
     // Update health and death status
