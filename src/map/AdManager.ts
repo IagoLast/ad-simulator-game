@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { Ad, SimpleAdStyle } from "../classes/ads/Ad";
-import { ColorfulAdStyle } from "../classes/SimpleAdStyle";
+import { ColorfulAdStyle } from "../classes/ColorfulAdStyle";
 import { WallAdStyle } from "../classes/ads/WallAdStyle";
 import { Obstacle } from "../types";
 import { AdPosition } from "../classes/MazeGenerator";
@@ -36,16 +36,6 @@ export class AdManager {
    */
   public setAdPositions(positions: AdPosition[]): void {
     this.adPositions = positions;
-  }
-
-  /**
-   * Add a new advertisement text to the pool
-   */
-  public addAdvertisementText(text: string): void {
-    if (!this.advertisementTexts.includes(text)) {
-      this.advertisementTexts.push(text);
-      console.log(`Added new ad text: "${text}"`);
-    }
   }
 
   /**

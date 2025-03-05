@@ -123,11 +123,4 @@ export class ObstacleManager {
     
     return position;
   }
-
-  /**
-   * Add a new advertisement text
-   */
-  public addAdvertisementText(text: string): void {
-    this.adManager.addAdvertisementText(text);
-  }
 } 

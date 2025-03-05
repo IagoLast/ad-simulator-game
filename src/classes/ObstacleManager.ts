@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { Ad, SimpleAdStyle } from "../classes/ads/Ad";
-import { ColorfulAdStyle } from "./SimpleAdStyle";
+import { ColorfulAdStyle } from "./ColorfulAdStyle";
 import { WallAdStyle } from "./ads/WallAdStyle";
 import { Obstacle } from "../types";
 import { MazeGenerator, AdPosition } from "./MazeGenerator";
@@ -174,117 +174,6 @@ export class ObstacleManager {
       `Created ${adsCreated} ads integrated with maze walls (${positionIndex} positions checked)`
     );
   }
-
-  // Fallback method for random ad placement
-  private createRandomAds(count: number): void {
-    console.log(`Creating ${count} random ads (fallback method)`);
-
-    // Create a grid of positions for better visibility
-    const gridSize = Math.ceil(Math.sqrt(count));
-    const spacing = 20; // Units between ads
-
-    // Keep track of placed ad positions to prevent overlapping
-    const placedAdPositions: Array<{
-      position: THREE.Vector3;
-      size: { width: number; height: number };
-      direction: string | null;
-    }> = [];
-
-    let adsCreated = 0;
-    let attempts = 0;
-    const maxAttempts = count * 10; // Allow several attempts per desired ad
-
-    while (adsCreated < count && attempts < maxAttempts) {
-      attempts++;
-
-      // Much more varied size range for ads
-      const width = Math.random() * 3 + 3; // 3-6 units wide
-      const height = Math.random() * 2 + 2; // 2-4 units tall
-
-      // Calculate position in a grid formation
-      const row = Math.floor(adsCreated / gridSize);
-      const col = adsCreated % gridSize;
-
-      // Center the grid and add some randomness
-      const centerOffset = ((gridSize - 1) * spacing) / 2;
-      const randomOffset = 5; // Maximum random offset
-
-      // Add increasing randomness for failed placement attempts
-      const extraRandomness = Math.min((attempts - adsCreated) * 0.5, 10);
-
-      const posX =
-        col * spacing -
-        centerOffset +
-        (Math.random() * (randomOffset + extraRandomness) -
-          (randomOffset + extraRandomness) / 2);
-      const posZ =
-        row * spacing -
-        centerOffset +
-        (Math.random() * (randomOffset + extraRandomness) -
-          (randomOffset + extraRandomness) / 2);
-
-      // Randomize height between eye level and overhead
-      const posY = Math.random() * 2 + 3; // 3-5 units off the ground (eye level)
-
-      // Random rotation - only 90-degree increments for better readability
-      const rotationOptions = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
-      const rotation =
-        rotationOptions[Math.floor(Math.random() * rotationOptions.length)];
-
-      const position = new THREE.Vector3(posX, posY, posZ);
-
-      // Check for overlapping with existing ads
-      const wouldOverlap = this.checkAdOverlap(
-        position,
-        { width, height },
-        null, // No specific direction for free-standing ads
-        placedAdPositions
-      );
-
-      if (!wouldOverlap) {
-        // Position is good, create the ad
-        // Pick a random advertisement text
-        const adText = this.getRandomAdText();
-
-        // Create either a simple or colorful ad style based on random chance
-        const useColorful = Math.random() > 0.3; // 70% chance of colorful style
-        const adStyle = useColorful
-          ? new ColorfulAdStyle()
-          : new SimpleAdStyle();
-
-        // Create the ad with the selected style
-        const ad = new Ad(
-          this.scene,
-          position,
-          rotation,
-          adText,
-          width,
-          height,
-          adStyle
-        );
-
-        // Add to obstacles for collision detection
-        this.obstacles.push(ad.toObstacle());
-
-        // Store in ad array
-        this.ads.push(ad);
-
-        // Remember this position to avoid overlaps
-        placedAdPositions.push({
-          position,
-          size: { width, height },
-          direction: null,
-        });
-
-        adsCreated++;
-      }
-    }
-
-    console.log(
-      `Created ${adsCreated} standalone ads in grid formation (after ${attempts} placement attempts)`
-    );
-  }
-
   /**
    * Check if a proposed ad position would overlap with existing ads
    * @param position Position to check
@@ -552,16 +441,6 @@ export class ObstacleManager {
     }
 
     return new THREE.Vector3(x, 2, z); // 2 units above ground
-  }
-
-  /**
-   * Add a new advertisement text to the pool
-   * @param text The text to add
-   */
-  public addAdvertisementText(text: string): void {
-    if (!this.advertisementTexts.includes(text)) {
-      this.advertisementTexts.push(text);
-    }
   }
 
   /**

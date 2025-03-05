@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { Player } from './classes/Player';
 import { ObstacleManager } from './map/ObstacleManager';
-import { CollisionSystem } from './classes/CollisionSystem';
 import { WeaponManager } from './classes/WeaponManager';
 import { BotManager } from './classes/BotManager';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
@@ -34,7 +33,6 @@ let renderer: THREE.WebGLRenderer;
 let controls: PointerLockControls;
 let player: Player;
 let obstacleManager: ObstacleManager;
-let collisionSystem: CollisionSystem;
 let weaponManager: WeaponManager;
 let botManager: BotManager;
 
@@ -284,7 +282,8 @@ function createLighting(): void {
 
 // Handle collisions between player and obstacles
 function handleCollisions(): void {
-  collisionSystem.update();
+  // Use the player's collision handler instead of collision system
+  player.handleCollisions();
   
   // Check player projectile collisions with bots
   botManager.checkProjectileCollisions(weaponManager.getAllProjectiles());
@@ -295,14 +294,6 @@ function handleCollisions(): void {
   if (playerCollisions > 0) {
     player.takeDamage(10 * playerCollisions);
   }
-}
-
-// @ts-ignore - Implemented but not currently used - part of the public API
-function spawnPlayer(): void {
-  // Use the refactored ObstacleManager's findSpawnPosition method
-  const spawnPosition = obstacleManager.findSpawnPosition();
-  player.controls.getObject().position.copy(spawnPosition);
-  gameState.velocity.set(0, 0, 0);
 }
 
 // Spawn bots at suitable positions
@@ -452,11 +443,11 @@ function init(): void {
   // Make obstacleManager available globally for other systems
   (window as any).obstacleManager = obstacleManager;
   
+  // Set the obstacle manager in the player for collision detection
+  player.setObstacleManager(obstacleManager);
+  
   // Initialize bot manager
   botManager = new BotManager(scene);
-  
-  // Initialize collision system
-  collisionSystem = new CollisionSystem(player, obstacleManager);
   
   // Initialize weapon system
   weaponManager = new WeaponManager(scene, player);

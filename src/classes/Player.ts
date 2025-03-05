@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { Collider } from '../types';
 import { JUMP_FORCE, GRAVITY, MOVEMENT_SPEED, AIR_CONTROL, FRICTION, isOnGround, applyFriction } from '../physics';
+import { ObstacleManager } from '../map/ObstacleManager';
+import { checkCapsuleBoxCollision } from '../physics';
 
 export class Player {
   public health: number = 100;
@@ -15,6 +17,7 @@ export class Player {
   public canJump: boolean = false;
   public isOnGround: boolean = false;
   public collider: Collider;
+  private obstacleManager: ObstacleManager | null = null;
   
   constructor(camera: THREE.PerspectiveCamera, domElement: HTMLElement) {
     this.controls = new PointerLockControls(camera, domElement);
@@ -23,6 +26,13 @@ export class Player {
       radius: 0.5,
       height: 3.0,
     };
+  }
+
+  /**
+   * Sets the ObstacleManager reference to check for collisions
+   */
+  public setObstacleManager(obstacleManager: ObstacleManager): void {
+    this.obstacleManager = obstacleManager;
   }
 
   public updateMovement(delta: number): void {
@@ -97,6 +107,32 @@ export class Player {
     const healthDisplay = document.getElementById('health');
     if (healthDisplay) {
       healthDisplay.textContent = `Health: ${this.health}%`;
+    }
+  }
+
+  /**
+   * Handles collisions with obstacles in the world
+   */
+  public handleCollisions(): void {
+    if (!this.obstacleManager) return;
+    
+    // Get player position and update collider
+    const playerPosition = this.controls.getObject().position;
+    this.collider.position.copy(playerPosition);
+    
+    // Check collisions with all obstacles
+    for (const obstacle of this.obstacleManager.getObstacles()) {
+      const result = checkCapsuleBoxCollision(this.collider, obstacle);
+      
+      if (result.collided && result.penetration) {
+        // Resolve collision by moving player away
+        playerPosition.add(result.penetration);
+        
+        // If collision is on y-axis, stop vertical velocity
+        if (Math.abs(result.penetration.y) > 0.01) {
+          this.velocity.y = 0;
+        }
+      }
     }
   }
 } 
