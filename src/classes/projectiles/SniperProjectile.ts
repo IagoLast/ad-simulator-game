@@ -96,10 +96,11 @@ export class SniperProjectile extends BaseProjectile {
   /**
    * Updates the position and effects of the sniper projectile
    * @param delta Time in seconds since the last frame
+   * @returns Whether the projectile is still active
    */
-  public update(delta: number): void {
+  public update(delta: number): boolean {
     // Call the parent update logic, which will call our overridden applyGravity
-    super.update(delta);
+    const isActive = super.update(delta);
     
     // Keep the projectile oriented in the direction of travel
     if (this.isActive && this.velocity.lengthSq() > 0.001) {
@@ -114,6 +115,8 @@ export class SniperProjectile extends BaseProjectile {
       // Apply the rotation to the mesh
       this.mesh.quaternion.setFromAxisAngle(axis, angle);
     }
+    
+    return isActive && this.isActive;
   }
   
   /**

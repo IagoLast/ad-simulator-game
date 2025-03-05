@@ -90,10 +90,11 @@ export class ClusterBallProjectile extends BaseProjectile {
   /**
    * Updates the projectile and any child projectiles
    * @param delta Time in seconds since the last frame
+   * @returns Whether the projectile is still active
    */
-  public update(delta: number): void {
+  public update(delta: number): boolean {
     // Call the parent update logic
-    super.update(delta);
+    const isActive = super.update(delta);
     
     // If we've exploded and have child projectiles, update them too
     if (this.hasExploded) {
@@ -101,6 +102,8 @@ export class ClusterBallProjectile extends BaseProjectile {
       // We keep the array to track which were our children
       this.childProjectiles = this.childProjectiles.filter(p => p.isActive);
     }
+    
+    return isActive && this.isActive;
   }
   
   /**

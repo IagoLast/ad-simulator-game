@@ -6,15 +6,6 @@ import { WeaponManager } from './classes/WeaponManager';
 import { BotManager } from './classes/BotManager';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { GameState } from './types';
-import { 
-  GRAVITY, 
-  JUMP_FORCE, 
-  MOVEMENT_SPEED, 
-  AIR_CONTROL, 
-  FRICTION,
-  isOnGround,
-  applyFriction
-} from './physics';
 
 // Game state
 const gameState: GameState = {
@@ -122,7 +113,7 @@ function setupEventListeners(): void {
         break;
       case 'Space':
         if (gameState.canJump) {
-          gameState.velocity.y += JUMP_FORCE;
+          player.jump();
           gameState.canJump = false;
         }
         break;
@@ -151,38 +142,38 @@ function setupEventListeners(): void {
 
   // Key up event (key release)
   document.addEventListener('keyup', (event) => {
-    switch (event.key) {
-      case 'w':
+    switch (event.code) {
+      case 'KeyW':
       case 'ArrowUp':
         gameState.moveForward = false;
         break;
-      case 's':
+      case 'KeyS':
       case 'ArrowDown':
         gameState.moveBackward = false;
         break;
-      case 'a':
+      case 'KeyA':
       case 'ArrowLeft':
         gameState.moveLeft = false;
         break;
-      case 'd':
+      case 'KeyD':
       case 'ArrowRight':
         gameState.moveRight = false;
         break;
-      case ' ':
+      case 'Space':
         // No es necesario hacer nada aquí
         break;
-      case '1':
-      case '2':
-      case '3':
-      case '4':
-      case '5':
+      case 'Digit1':
+      case 'Digit2':
+      case 'Digit3':
+      case 'Digit4':
+      case 'Digit5':
         // Cambiar arma por índice
-        const weaponIndex = parseInt(event.key) - 1;
+        const weaponIndex = parseInt(event.code.slice(-1)) - 1;
         if (weaponIndex >= 0 && weaponIndex < 5) { // Máximo 5 armas
           weaponManager.setWeapon(weaponIndex);
         }
         break;
-      case 'b':
+      case 'KeyB':
         // Generar un bot con proyectiles rebotantes
         const playerPos = controls.getObject().position.clone();
         // Colocar el bot a 10 unidades frente al jugador
@@ -332,54 +323,6 @@ function updateHealth(): void {
   }
 }
 
-// Update player movement
-function updatePlayerMovement(delta: number): void {
-  // Apply gravity
-  gameState.velocity.y -= GRAVITY * delta;
-  
-  // Check if on ground
-  gameState.isOnGround = isOnGround(controls.getObject().position.y, 1.8, 0.1);
-  
-  if (gameState.isOnGround) {
-    gameState.velocity.y = Math.max(0, gameState.velocity.y);
-    gameState.canJump = true;
-    
-    // Apply friction when on ground
-    applyFriction(gameState.velocity, FRICTION);
-  }
-  
-  // Movement direction
-  gameState.direction.z = Number(gameState.moveForward) - Number(gameState.moveBackward);
-  gameState.direction.x = Number(gameState.moveRight) - Number(gameState.moveLeft);
-  gameState.direction.normalize();
-  
-  // Apply movement speed with air control consideration
-  const controlFactor = gameState.isOnGround ? 1.0 : AIR_CONTROL;
-  
-  if (gameState.moveForward || gameState.moveBackward) {
-    gameState.velocity.z -= gameState.direction.z * MOVEMENT_SPEED * delta * controlFactor;
-  }
-  
-  if (gameState.moveLeft || gameState.moveRight) {
-    gameState.velocity.x -= gameState.direction.x * MOVEMENT_SPEED * delta * controlFactor;
-  }
-  
-  // Apply velocity to controls
-  controls.moveRight(-gameState.velocity.x * delta);
-  controls.moveForward(-gameState.velocity.z * delta);
-  
-  // Update player position with gravity
-  controls.getObject().position.y += gameState.velocity.y * delta;
-  
-  // Check if player fell through the floor
-  if (controls.getObject().position.y < 1.8) {
-    gameState.velocity.y = 0;
-    controls.getObject().position.y = 1.8;
-    gameState.canJump = true;
-    gameState.isOnGround = true;
-  }
-}
-
 // Animation loop
 function animate(): void {
   requestAnimationFrame(animate);
@@ -388,8 +331,12 @@ function animate(): void {
   const delta = (time - gameState.prevTime) / 1000; // Convert to seconds
   
   if (controls.isLocked) {
-    // Update player movement
-    updatePlayerMovement(delta);
+    // Update player movement using the Player class
+    player.moveForward = gameState.moveForward;
+    player.moveBackward = gameState.moveBackward;
+    player.moveLeft = gameState.moveLeft;
+    player.moveRight = gameState.moveRight;
+    player.updateMovement(delta);
     
     // Update bot manager
     botManager.update(delta, player.controls.getObject().position, obstacleManager.getObstacles());
@@ -404,7 +351,7 @@ function animate(): void {
     handleCollisions();
     
     // Update weapon system
-    weaponManager.update(delta, obstacleManager.getObstacles());
+    weaponManager.update(delta);
   }
   
   renderer.render(scene, camera);
@@ -454,6 +401,9 @@ function init(): void {
   // Initialize obstacles
   obstacleManager = new ObstacleManager(scene);
   obstacleManager.createObstacles(120);
+  
+  // Make obstacleManager available globally for other systems
+  (window as any).obstacleManager = obstacleManager;
   
   // Initialize bot manager
   botManager = new BotManager(scene);

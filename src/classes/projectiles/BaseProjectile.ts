@@ -83,41 +83,34 @@ export abstract class BaseProjectile {
   }
   
   /**
-   * Updates the projectile state for the current frame
-   * @param delta Time in seconds since the last frame
+   * Updates the projectile's position and effects
+   * @param delta Time since last frame in seconds
+   * @returns Whether the projectile is still active
    */
-  public update(delta: number): void {
-    if (!this.isActive) return;
-    
-    // Apply gravity with the option to override in subclasses
-    this.applyGravity(delta);
-    
-    // Debug velocity after gravity
-    const oldPosition = this.mesh.position.clone();
+  public update(delta: number): boolean {
+    // Skip update if not active
+    if (!this.isActive) return false;
     
     // Update position based on velocity
-    this.mesh.position.x += this.velocity.x * delta;
-    this.mesh.position.y += this.velocity.y * delta;
-    this.mesh.position.z += this.velocity.z * delta;
+    this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
     
-    // Log position change for debugging
-    const displacement = this.mesh.position.clone().sub(oldPosition).length();
-    if (Math.random() < 0.05) { // Log only occasionally to avoid console spam
-      console.log(`Proyectil actualizado - Tipo: ${this.type}, Delta: ${delta.toFixed(4)}`);
-      console.log(`Velocidad actual: (${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(2)}, ${this.velocity.z.toFixed(2)})`);
-      console.log(`Posición actual: (${this.mesh.position.x.toFixed(2)}, ${this.mesh.position.y.toFixed(2)}, ${this.mesh.position.z.toFixed(2)})`);
-      console.log(`Desplazamiento: ${displacement.toFixed(4)} unidades`);
-    }
+    // Apply gravity
+    this.applyGravity(delta);
     
-    // Update visual effects
+    // Update any visual effects
     this.updateEffects(delta);
     
     // Decrease lifespan
     this.lifespan -= delta;
+    
+    // Deactivate if lifespan is over
     if (this.lifespan <= 0) {
-      console.log(`Proyectil desactivado por tiempo de vida`);
+      console.log('Projectile deactivated due to lifespan end');
       this.deactivate();
+      return false;
     }
+    
+    return this.isActive;
   }
   
   /**
@@ -157,7 +150,15 @@ export abstract class BaseProjectile {
    * Deactivates the projectile, marking it for removal
    */
   public deactivate(): void {
+    if (!this.isActive) return; // Prevent double deactivation
+    
+    console.log(`Deactivating projectile of type ${this.type} at position (${this.mesh.position.x.toFixed(2)}, ${this.mesh.position.y.toFixed(2)}, ${this.mesh.position.z.toFixed(2)})`);
     this.isActive = false;
+    
+    // Remove from scene immediately to ensure visual feedback
+    if (this.scene) {
+      this.remove(this.scene);
+    }
   }
   
   /**

@@ -6,6 +6,7 @@ import { RapidFirePaintball } from './weapons/RapidFirePaintball';
 import { Obstacle } from '../types';
 import { Player } from './Player';
 import { BaseProjectile } from './projectiles/BaseProjectile';
+import { ObstacleManager } from '../classes/ObstacleManager';
 
 export class WeaponManager {
   private scene: THREE.Scene;
@@ -14,13 +15,22 @@ export class WeaponManager {
   private currentWeaponIndex: number = 0;
   private isAutoFiring: boolean = false;
   private autoFireInterval: number | null = null;
+  private autoFireTimer: number = 0;
+  private lastReloadingState: boolean = false;
+  private obstacleManager: ObstacleManager;
 
   constructor(scene: THREE.Scene, player: Player) {
     this.scene = scene;
     this.player = player;
-
-    // Inicializar armas disponibles
+    
+    // Get obstacle manager from global window (will be set in game.ts)
+    this.obstacleManager = (window as any).obstacleManager;
+    
+    // Inicializar armas
     this.initializeWeapons();
+    
+    // Mostrar información del arma inicial
+    this.displayWeaponInfo();
   }
 
   private initializeWeapons(): void {
@@ -44,36 +54,63 @@ export class WeaponManager {
   }
 
   /**
-   * Updates the state of the current weapon and all projectiles from all weapons
-   * @param delta Time in seconds since the last frame
-   * @param obstacles Array of obstacles to check for collisions
+   * Updates the weapon manager
+   * @param delta Time since last frame in seconds
    */
-  public update(delta: number, obstacles: Obstacle[]): void {
-    // Update the current weapon state
+  public update(delta: number): void {
+    // Update weapon timers
     const currentWeapon = this.getCurrentWeapon();
-    currentWeapon.update(delta);
-    
-    console.log(`Actualizando arma: ${currentWeapon.getName()}, delta: ${delta.toFixed(4)}`);
-    
-    // Update projectiles from all weapons
-    for (const weapon of this.weapons) {
-      this.updateWeaponProjectiles(weapon, delta);
+    if (currentWeapon) {
+      currentWeapon.update(delta);
+      
+      // Check if we need to update the ammo display (e.g. after reload)
+      if (currentWeapon.isReloading() !== this.lastReloadingState) {
+        this.lastReloadingState = currentWeapon.isReloading();
+        this.updateAmmoDisplay();
+      }
     }
     
-    // Check and handle projectile collisions with obstacles
+    // Auto-fire if enabled
+    if (this.isAutoFiring) {
+      this.autoFireTimer += delta;
+      const fireInterval = 1 / currentWeapon.getFireRate();
+      
+      if (this.autoFireTimer >= fireInterval) {
+        this.shoot();
+        this.autoFireTimer = 0;
+      }
+    }
+    
+    // Update projectiles
+    const obstacles = this.obstacleManager.getObstacles();
     this.updateProjectiles(delta, obstacles);
+    
+    // Clean up inactive projectiles
+    this.cleanupInactiveProjectiles();
   }
   
   /**
-   * Helper method to update projectiles from a specific weapon
-   * @param weapon The weapon whose projectiles to update
-   * @param delta Time in seconds since the last frame
+   * Removes inactive projectiles from the weapons array
    */
-  private updateWeaponProjectiles(weapon: Weapon, delta: number): void {
-    // Call the weapon's updateProjectiles method
-    weapon.updateProjectiles(delta);
+  private cleanupInactiveProjectiles(): void {
+    // Clean up inactive projectiles from all weapons
+    for (const weapon of this.weapons) {
+      const projectiles = weapon.getProjectiles();
+      const activeProjectiles = projectiles.filter(proj => proj.isActive);
+      
+      // Only perform cleanup if there are inactive projectiles
+      if (activeProjectiles.length < projectiles.length) {
+        // Get inactive projectiles to log them for debugging
+        const inactiveCount = projectiles.length - activeProjectiles.length;
+        console.log(`Removing ${inactiveCount} inactive projectiles from ${weapon.getName()}`);
+        
+        // Replace the entire projectiles array with only active ones
+        // This avoids mutation issues during iteration
+        weapon['projectiles'] = activeProjectiles;
+      }
+    }
   }
-  
+
   /**
    * Gets all projectiles from all weapons
    * @returns Array of all active projectiles
@@ -247,15 +284,20 @@ export class WeaponManager {
    * @param delta Time since last frame in seconds
    * @param obstacles Obstacles to check for collisions
    */
-  private updateProjectiles(_delta: number, obstacles: Obstacle[]): void {
-    // Get all projectiles from all weapons
+  private updateProjectiles(delta: number, obstacles: Obstacle[]): void {
+    // Collect all projectiles from all weapons
     const allProjectiles = this.getAllProjectiles();
     
-    console.log(`Actualizando ${allProjectiles.length} proyectiles con detección de colisiones`);
-    
-    // Check each projectile for collisions with obstacles
+    // Update each projectile (movement, effects, etc.)
     for (const projectile of allProjectiles) {
+      // Skip already inactive projectiles
       if (!projectile.isActive) continue;
+      
+      // Update projectile and check if still active
+      const isActive = projectile.update(delta);
+      
+      // No need to check collisions if the projectile was deactivated during update
+      if (!isActive) continue;
       
       const position = projectile.getPosition();
       const radius = projectile.getRadius();
