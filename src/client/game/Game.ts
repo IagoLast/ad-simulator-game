@@ -253,14 +253,18 @@ export class Game {
     // Clear the current walls list
     this.walls = [];
     
-    // Find all objects in the scene with type WALL
+    // Find all objects in the scene with isCollidable flag
     this.scene.traverse((object) => {
-      if (object.userData && object.userData.type === EntityType.WALL && object.userData.isCollidable) {
+      if (
+        object.userData && 
+        object.userData.isCollidable && 
+        (object.userData.type === EntityType.WALL || object.userData.type === EntityType.BILLBOARD)
+      ) {
         this.walls.push(object);
       }
     });
     
-    console.log(`Found ${this.walls.length} walls for collision detection`);
+    console.log(`Found ${this.walls.length} collidable objects for collision detection`);
     
     // If we have a local player, update its wall references for collision detection
     if (this.localPlayer) {

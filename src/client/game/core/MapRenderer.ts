@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EntityType, MapData, MapEntity } from '../../../shared/types';
+import { Billboard, EntityType, MapData, MapEntity } from '../../../shared/types';
 
 /**
  * MapRenderer class for rendering map entities like walls and exits
@@ -76,6 +76,8 @@ export class MapRenderer {
         return this.createWall(entity);
       case EntityType.EXIT:
         return this.createExit(entity);
+      case EntityType.BILLBOARD:
+        return this.createBillboard(entity as Billboard);
       default:
         console.warn(`Unknown entity type: ${entity.type}`);
         return null;
@@ -176,6 +178,164 @@ export class MapRenderer {
     exit.userData.isCollidable = false;
     
     return exit;
+  }
+  
+  /**
+   * Create a billboard object with text
+   * @param entity Billboard entity data
+   * @returns THREE.Group representing the billboard with text
+   */
+  private createBillboard(entity: Billboard): THREE.Group {
+    const dimensions = entity.dimensions || { width: 5, height: 3, depth: 0.2 };
+    const billboardGroup = new THREE.Group();
+    
+    // Billboard structure (frame)
+    const frameGeometry = new THREE.BoxGeometry(
+      dimensions.width,
+      dimensions.height,
+      dimensions.depth
+    );
+    
+    // Frame material
+    const frameMaterial = new THREE.MeshStandardMaterial({
+      color: 0x333333, // Dark gray
+      roughness: 0.6,
+      metalness: 0.3
+    });
+    
+    // Create the billboard frame
+    const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+    frame.castShadow = true;
+    frame.receiveShadow = true;
+    billboardGroup.add(frame);
+    
+    // Create text on both sides of the billboard
+    this.addTextToFace(billboardGroup, entity.text, dimensions, 1); // Front face
+    this.addTextToFace(billboardGroup, entity.text, dimensions, -1); // Back face
+    
+    // Set position
+    billboardGroup.position.set(
+      entity.position.x,
+      entity.position.y,
+      entity.position.z
+    );
+    
+    // Apply rotation if provided
+    if (entity.rotation) {
+      billboardGroup.rotation.set(
+        entity.rotation.x || 0,
+        entity.rotation.y || 0,
+        entity.rotation.z || 0
+      );
+    }
+    
+    // Set name for later identification
+    billboardGroup.name = 'billboard';
+    
+    // Add to userData for collision detection
+    billboardGroup.userData.type = EntityType.BILLBOARD;
+    billboardGroup.userData.isCollidable = true;
+    billboardGroup.userData.text = entity.text;
+    
+    return billboardGroup;
+  }
+  
+  /**
+   * Add text to a face of the billboard
+   * @param group The group to add the text to
+   * @param text The text to display
+   * @param dimensions The dimensions of the billboard
+   * @param direction 1 for front, -1 for back
+   */
+  private addTextToFace(
+    group: THREE.Group, 
+    text: string, 
+    dimensions: { width: number, height: number, depth: number },
+    direction: number
+  ): void {
+    // Create canvas for dynamic text rendering
+    const canvas = document.createElement('canvas');
+    const textureSize = 512;
+    canvas.width = textureSize;
+    canvas.height = textureSize;
+    
+    // Get 2D context and configure
+    const context = canvas.getContext('2d');
+    if (context) {
+      // Clear background
+      context.fillStyle = 'white';
+      context.fillRect(0, 0, textureSize, textureSize);
+      
+      // Draw border
+      context.strokeStyle = 'black';
+      context.lineWidth = 8;
+      context.strokeRect(10, 10, textureSize - 20, textureSize - 20);
+      
+      // Configure text
+      context.fillStyle = 'black';
+      const fontSize = 48;
+      context.font = `bold ${fontSize}px Arial`;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      
+      // Calculate text position and break into lines if needed
+      const maxLineWidth = textureSize - 40;
+      const words = text.split(' ');
+      const lines: string[] = [];
+      let currentLine = '';
+      
+      words.forEach(word => {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const metrics = context.measureText(testLine);
+        
+        if (metrics.width > maxLineWidth && currentLine !== '') {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      });
+      
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+      
+      // Draw text lines
+      const lineHeight = fontSize * 1.2;
+      const totalTextHeight = lineHeight * lines.length;
+      const startY = (textureSize - totalTextHeight) / 2 + lineHeight / 2;
+      
+      lines.forEach((line, index) => {
+        context.fillText(line, textureSize / 2, startY + index * lineHeight);
+      });
+    }
+    
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    
+    // Create material with the texture
+    const material = new THREE.MeshStandardMaterial({
+      map: texture,
+      transparent: false,
+      side: THREE.FrontSide
+    });
+    
+    // Create plane for text display
+    const planeGeometry = new THREE.PlaneGeometry(
+      dimensions.width - 0.1,
+      dimensions.height - 0.1
+    );
+    
+    const textPlane = new THREE.Mesh(planeGeometry, material);
+    textPlane.position.z = (dimensions.depth / 2 + 0.01) * direction; // Position just in front of the frame
+    
+    // Flip text for back face to read correctly
+    if (direction === -1) {
+      textPlane.rotation.y = Math.PI;
+    }
+    
+    group.add(textPlane);
   }
   
   /**

@@ -21,7 +21,8 @@ export interface PlayerState {
  */
 export enum EntityType {
   WALL = 'wall',
-  EXIT = 'exit'
+  EXIT = 'exit',
+  BILLBOARD = 'billboard'
 }
 
 /**
@@ -60,6 +61,14 @@ export interface Wall extends MapEntity {
 export interface Exit extends MapEntity {
   type: EntityType.EXIT;
   teamId: number; // Required for exits
+}
+
+/**
+ * Billboard entity with text
+ */
+export interface Billboard extends MapEntity {
+  type: EntityType.BILLBOARD;
+  text: string;
 }
 
 /**
