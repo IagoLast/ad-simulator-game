@@ -18,6 +18,11 @@ export class WeaponManager {
   private autoFireTimer: number = 0;
   private lastReloadingState: boolean = false;
   private obstacleManager: ObstacleManager;
+  
+  // Cooldown properties
+  private weaponCooldowns: number[] = [0, 0, 0]; // Cooldown time remaining for each weapon
+  private weaponCooldownTimes: number[] = [0.2, 1.0, 0.1]; // Cooldown durations in seconds
+  private lastShootTimes: number[] = [0, 0, 0]; // Last time each weapon was fired
 
   constructor(scene: THREE.Scene, player: Player) {
     this.scene = scene;
@@ -87,6 +92,9 @@ export class WeaponManager {
     
     // Clean up inactive projectiles
     this.cleanupInactiveProjectiles();
+    
+    // Update cooldowns
+    this.updateCooldowns(delta);
   }
   
   /**
@@ -183,69 +191,74 @@ export class WeaponManager {
     const weapon = this.getCurrentWeapon();
     if (!weapon) return;
     
-    const ammoElement = document.getElementById('ammo');
-    const nameElement = document.getElementById('weapon-name');
-    const ammoCounter = document.getElementById('ammo-counter');
-    
-    const ammo = weapon.getCurrentAmmo();
-    const maxAmmo = weapon.getMaxAmmo();
-    
-    if (ammoElement) {
-        ammoElement.textContent = `Arma: ${weapon.getName()} | Munición: ${ammo}/${maxAmmo}`;
+    // Update all weapon ammo displays in weapon selector
+    this.weapons.forEach((weapon, index) => {
+      // Get the weapon item element
+      const weaponItem = document.querySelector(`.weapon-item[data-index="${index}"]`);
+      const ammoElement = document.getElementById(`ammo-${index}`);
+      
+      if (ammoElement && weaponItem) {
+        const ammo = weapon.getCurrentAmmo();
+        const maxAmmo = weapon.getMaxAmmo();
+        ammoElement.textContent = `${ammo}/${maxAmmo}`;
         
-        // Mostrar estado de recarga si es aplicable
+        // Handle reloading animation
         if (weapon.isReloading()) {
-            ammoElement.textContent += ' (Recargando...)';
+          // Add reloading class to trigger animation
+          weaponItem.classList.add('reloading');
+          ammoElement.style.color = '#ffcc00'; // Yellow during reload
+        } else {
+          // Remove reloading class when not reloading
+          weaponItem.classList.remove('reloading');
+          
+          // Set color based on ammo state
+          if (ammo === 0) {
+            ammoElement.style.color = '#ff3333'; // Red when empty
+          } else {
+            ammoElement.style.color = 'white'; // Normal color
+          }
         }
-    }
-    
-    if (nameElement) {
-        nameElement.textContent = weapon.getName();
-    }
-    
-    if (ammoCounter) {
-        ammoCounter.textContent = `${ammo}/${maxAmmo}`;
-    }
+        
+        // Update cooldown display for each weapon
+        this.updateCooldownDisplay(index);
+      }
+    });
   }
 
   public shoot(): void {
-    if (this.weapons.length === 0) return;
+    const weapon = this.getCurrentWeapon();
+    if (!weapon) return;
     
-    const currentWeapon = this.getCurrentWeapon();
-    
-    // Verificar que el arma tenga munición y no esté en recarga
-    if (currentWeapon.getCurrentAmmo() <= 0) {
-        console.log("Sin munición. Recargando...");
-        this.reload();
-        return;
-    }
-    
-    if (currentWeapon.isReloading()) {
-        console.log("El arma está recargando...");
-        return;
+    // Check if weapon is on cooldown
+    if (this.weaponCooldowns[this.currentWeaponIndex] > 0) {
+      // Weapon is on cooldown, can't shoot
+      console.log(`Weapon ${this.currentWeaponIndex} on cooldown: ${this.weaponCooldowns[this.currentWeaponIndex].toFixed(1)}s`);
+      return;
     }
     
     // Obtener la posición y dirección del jugador
-    const camera = this.player.controls.getObject();
-    const position = camera.position.clone();
+    const cameraDirection = new THREE.Vector3();
+    this.player.controls.getDirection(cameraDirection);
     
-    // Calcular la dirección de disparo desde la cámara
-    const direction = new THREE.Vector3(0, 0, -1);
-    direction.applyQuaternion(camera.quaternion);
+    const position = this.player.controls.getObject().position.clone();
+    const direction = cameraDirection.clone();
     
-    // Ajustar la posición para que el disparo salga desde un punto más adelante del jugador
-    const firingOffset = 0.5; // Distancia adelante del jugador
-    position.add(direction.clone().multiplyScalar(firingOffset));
+    // If weapon has ammo and is not reloading, proceed with shooting
+    const projectile = weapon.shoot(position, direction);
     
-    // Disparar y obtener el proyectil creado
-    const projectile = currentWeapon.shoot(position, direction);
+    if (projectile) {
+      // Shooting was successful, apply cooldown
+      this.weaponCooldowns[this.currentWeaponIndex] = this.weaponCooldownTimes[this.currentWeaponIndex];
+      this.lastShootTimes[this.currentWeaponIndex] = Date.now();
+      
+      // Update display
+      this.updateCooldownDisplay(this.currentWeaponIndex);
+      
+      console.log(`Proyectil disparado desde ${weapon.getName()}. Munición restante: ${weapon.getCurrentAmmo()}`);
+    }
     
     // Actualizar el display de munición
     this.updateAmmoDisplay();
-    
-    if (projectile) {
-        console.log(`Proyectil disparado desde ${currentWeapon.getName()}. Munición restante: ${currentWeapon.getCurrentAmmo()}`);
-    }
   }
 
   public startAutoFire(): void {
@@ -534,5 +547,53 @@ export class WeaponManager {
     }
     
     return faceNormal;
+  }
+
+  // New method to update weapon cooldowns
+  private updateCooldowns(delta: number): void {
+    // Update cooldowns for all weapons
+    for (let i = 0; i < this.weaponCooldowns.length; i++) {
+      if (this.weaponCooldowns[i] > 0) {
+        // Reduce cooldown time
+        this.weaponCooldowns[i] -= delta;
+        
+        // Make sure it doesn't go below 0
+        if (this.weaponCooldowns[i] < 0) {
+          this.weaponCooldowns[i] = 0;
+        }
+        
+        // Update cooldown display
+        this.updateCooldownDisplay(i);
+      }
+    }
+  }
+  
+  // New method to update the cooldown display
+  private updateCooldownDisplay(weaponIndex: number): void {
+    const cooldownOverlay = document.getElementById(`cooldown-${weaponIndex}`);
+    const cooldownText = document.getElementById(`cooldown-text-${weaponIndex}`);
+    const weaponItem = document.querySelector(`.weapon-item[data-index="${weaponIndex}"]`);
+    
+    if (cooldownOverlay && cooldownText && weaponItem) {
+      const maxCooldown = this.weaponCooldownTimes[weaponIndex];
+      const currentCooldown = this.weaponCooldowns[weaponIndex];
+      
+      if (currentCooldown > 0) {
+        // Weapon is on cooldown
+        weaponItem.classList.add('cooldown');
+        
+        // Update height of cooldown overlay (100% when full cooldown, 0% when no cooldown)
+        const heightPercentage = (currentCooldown / maxCooldown) * 100;
+        cooldownOverlay.style.height = `${heightPercentage}%`;
+        
+        // Update cooldown text
+        cooldownText.textContent = currentCooldown.toFixed(1) + 's';
+      } else {
+        // Weapon cooldown complete
+        weaponItem.classList.remove('cooldown');
+        cooldownOverlay.style.height = '0%';
+        cooldownText.textContent = '';
+      }
+    }
   }
 } 
