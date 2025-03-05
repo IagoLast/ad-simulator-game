@@ -16,7 +16,6 @@ export class Game {
   private localPlayer: Player | null;
   private controls: Controls;
   private lastUpdateTime: number;
-  private playerCount: HTMLElement;
   private ground: THREE.Mesh;
 
   /**
@@ -108,9 +107,6 @@ export class Game {
           this.createPlayer(playerState);
         }
       });
-      
-      // Update player count
-      this.updatePlayerCount();
     });
     
     // Handle player joined
@@ -119,9 +115,6 @@ export class Game {
       
       // Create new player
       this.createPlayer(playerState);
-      
-      // Update player count
-      this.updatePlayerCount();
     });
     
     // Handle player moved
@@ -150,9 +143,6 @@ export class Game {
         
         // Remove from map
         this.players.delete(playerId);
-        
-        // Update player count
-        this.updatePlayerCount();
       }
     });
   }
@@ -173,14 +163,6 @@ export class Game {
     
     // Return player
     return player;
-  }
-
-  /**
-   * Update player count display
-   */
-  private updatePlayerCount(): void {
-    // Update player count text
-    this.playerCount.textContent = `Players: ${this.players.size}`;
   }
 
   /**
