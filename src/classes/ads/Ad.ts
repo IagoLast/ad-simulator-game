@@ -13,6 +13,9 @@ export interface AdStyle {
  */
 export class SimpleAdStyle implements AdStyle {
   apply(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, text: string): void {
+    // Clear canvas first
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    
     // Fill background
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, canvas.width, canvas.height);
@@ -22,10 +25,26 @@ export class SimpleAdStyle implements AdStyle {
     context.lineWidth = 8;
     context.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
     
-    // Draw text
-    const fontSize = Math.floor(canvas.width / 10);
-    context.fillStyle = '#000000';
+    // Determine font size based on text length
+    let fontSize = Math.floor(canvas.width / 10); // Default size
+    
+    // Adjust font size for longer text
+    const MAX_WIDTH_PERCENTAGE = 0.8; // Use 80% of canvas width at most
+    const maxWidth = canvas.width * MAX_WIDTH_PERCENTAGE;
+    
+    // Start with default font size and reduce if needed
     context.font = `bold ${fontSize}px Arial, sans-serif`;
+    let textMetrics = context.measureText(text);
+    
+    // If text is too wide, reduce font size proportionally
+    if (textMetrics.width > maxWidth) {
+      const scaleFactor = maxWidth / textMetrics.width;
+      fontSize = Math.floor(fontSize * scaleFactor);
+      context.font = `bold ${fontSize}px Arial, sans-serif`;
+    }
+    
+    // Draw text
+    context.fillStyle = '#000000';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText(text, canvas.width / 2, canvas.height / 2);
@@ -72,9 +91,9 @@ export class Ad {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Could not create canvas context');
     
-    // Set canvas size
-    canvas.width = 512;
-    canvas.height = 256;
+    // Set canvas size - increase for better resolution
+    canvas.width = 1024;
+    canvas.height = 512;
     
     // Apply the provided style
     style.apply(context, canvas, adText);
@@ -83,20 +102,31 @@ export class Ad {
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
     
-    // Create material with the texture
-    const panelMaterial = new THREE.MeshLambertMaterial({
+    // Create material with the texture - use StandardMaterial for better lighting
+    const panelMaterial = new THREE.MeshStandardMaterial({
       map: texture,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
+      roughness: 0.2,
+      metalness: 0.1,
+      transparent: false,
+      depthTest: true,
+      depthWrite: true
     });
     
     // Create the panel mesh
     const panel = new THREE.Mesh(panelGeometry, panelMaterial);
     
-    // Create frame around ad
-    const frameGeometry = new THREE.BoxGeometry(width + 0.2, height + 0.2, 0.1);
-    const frameMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    // Create frame around ad - reduce depth to avoid shadows
+    const frameGeometry = new THREE.BoxGeometry(width + 0.2, height + 0.2, 0.05);
+    const frameMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x333333,
+      roughness: 0.5,
+      metalness: 0.2
+    });
     const frame = new THREE.Mesh(frameGeometry, frameMaterial);
-    frame.position.set(0, 0, -0.05);
+    
+    // Position frame slightly behind the panel to avoid z-fighting
+    frame.position.set(0, 0, -0.03);
     
     // Add elements to group
     this.mesh.add(frame);
@@ -115,11 +145,19 @@ export class Ad {
       size: new THREE.Vector3(width, height, 0.2)
     };
     
-    // Add shadow properties
-    panel.castShadow = true;
-    panel.receiveShadow = true;
-    frame.castShadow = true;
-    frame.receiveShadow = true;
+    // Add shadow properties - but disable for wall ads to prevent shadow issues
+    const isWallAd = width > 20; // Assume wall ads are large
+    if (!isWallAd) {
+      panel.castShadow = true;
+      panel.receiveShadow = true;
+      frame.castShadow = true;
+      frame.receiveShadow = true;
+    } else {
+      panel.castShadow = false;
+      panel.receiveShadow = false;
+      frame.castShadow = false;
+      frame.receiveShadow = false;
+    }
     
     // Add to scene
     scene.add(this.mesh);

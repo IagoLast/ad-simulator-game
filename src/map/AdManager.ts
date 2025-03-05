@@ -185,62 +185,116 @@ export class AdManager {
     // Clear previous obstacles
     const newObstacles: Obstacle[] = [];
     
-    // Wall positions - we'll place one ad on each wall, and two extra on bigger walls
-    // (6 ads total as requested)
-    const offset = 2; // Offset from the wall to prevent clipping
+    // Wall ads configuration
+    const offset = 7; // Distance from walls
+    
+    // Set standard aspect ratio for all ads (width/height)
+    const aspectRatio = 1.8; // Typical billboard aspect ratio
+    
+    // Calculate sizes based on world dimensions and maintain aspect ratio
+    const primaryWidth = this.worldSize * 0.55; // Slightly reduced for better spacing
+    const primaryHeight = primaryWidth / aspectRatio;
+    
+    const secondaryWidth = this.worldSize * 0.22; // Reduced to avoid overlaps
+    const secondaryHeight = secondaryWidth / aspectRatio;
+    
+    // Increased spacing values to prevent overlaps
+    const horizontalSpacing = 25; // Increased from 15
+    
+    // Create tracking for placed ads to check overlaps
+    const placedAds: Array<{
+      position: THREE.Vector3;
+      size: { width: number; height: number };
+      direction: string | null;
+    }> = [];
+    
+    // Wall positions with careful spacing to avoid overlaps
+    // ALL rotations MUST face inward to the battlefield
     const walls = [
-      // North wall (front)
+      // North wall (front) - center ad
       {
         position: new THREE.Vector3(0, this.wallHeight / 2, this.worldSize - offset),
-        rotation: 0,
-        width: this.worldSize * 0.7, // Reduced size
-        height: this.wallHeight * 0.6  // Reduced size
+        rotation: Math.PI, // Facing inward (rotated 180 degrees)
+        width: primaryWidth, 
+        height: primaryHeight,
+        name: "North Wall Center",
+        direction: "north"
       },
-      // North wall (front) - second ad
+      // North wall (front) - left side ad
       {
-        position: new THREE.Vector3(-this.worldSize / 2, this.wallHeight / 2, this.worldSize - offset),
-        rotation: 0,
-        width: this.worldSize * 0.3, // Reduced size
-        height: this.wallHeight * 0.6  // Reduced size
+        // Positioned to the left with proper spacing to avoid overlap
+        position: new THREE.Vector3(-this.worldSize / 2 + secondaryWidth/2 + horizontalSpacing, 
+                                    this.wallHeight / 2, 
+                                    this.worldSize - offset),
+        rotation: Math.PI, // Facing inward (rotated 180 degrees)
+        width: secondaryWidth,
+        height: secondaryHeight,
+        name: "North Wall Left",
+        direction: "north"
       },
-      // South wall (back)
+      // South wall (back) - center ad
       {
         position: new THREE.Vector3(0, this.wallHeight / 2, -this.worldSize + offset),
-        rotation: Math.PI,
-        width: this.worldSize * 0.7, // Reduced size
-        height: this.wallHeight * 0.6  // Reduced size
+        rotation: 0, // Facing inward (no rotation needed)
+        width: primaryWidth,
+        height: primaryHeight,
+        name: "South Wall Center",
+        direction: "south"
       },
-      // South wall (back) - second ad
+      // South wall (back) - right side ad
       {
-        position: new THREE.Vector3(this.worldSize / 2, this.wallHeight / 2, -this.worldSize + offset),
-        rotation: Math.PI,
-        width: this.worldSize * 0.3, // Reduced size
-        height: this.wallHeight * 0.6  // Reduced size
+        // Positioned to the right with proper spacing to avoid overlap
+        position: new THREE.Vector3(this.worldSize / 2 - secondaryWidth/2 - horizontalSpacing, 
+                                   this.wallHeight / 2, 
+                                   -this.worldSize + offset),
+        rotation: 0, // Facing inward (no rotation needed)
+        width: secondaryWidth,
+        height: secondaryHeight,
+        name: "South Wall Right",
+        direction: "south"
       },
       // East wall (right)
       {
         position: new THREE.Vector3(this.worldSize - offset, this.wallHeight / 2, 0),
-        rotation: -Math.PI / 2,
-        width: this.worldSize * 0.7, // Reduced size
-        height: this.wallHeight * 0.6  // Reduced size
+        rotation: -Math.PI / 2, // Facing inward - changed to ensure proper orientation
+        width: primaryWidth,
+        height: primaryHeight,
+        name: "East Wall",
+        direction: "east"
       },
       // West wall (left)
       {
         position: new THREE.Vector3(-this.worldSize + offset, this.wallHeight / 2, 0),
-        rotation: Math.PI / 2,
-        width: this.worldSize * 0.7, // Reduced size
-        height: this.wallHeight * 0.6  // Reduced size
+        rotation: Math.PI / 2, // Facing inward - changed to ensure proper orientation
+        width: primaryWidth,
+        height: primaryHeight,
+        name: "West Wall",
+        direction: "west"
       }
     ];
     
-    // Create each wall ad
+    // Create each wall ad, checking for overlaps
     for (let i = 0; i < walls.length; i++) {
       const wall = walls[i];
+      
+      // Check if this wall ad would overlap with any existing ads
+      const wallPosition = wall.position.clone();
+      
+      // Skip this wall position if it overlaps with existing ads
+      if (this.checkAdOverlap(
+        wallPosition,
+        { width: wall.width, height: wall.height },
+        wall.direction,
+        placedAds
+      )) {
+        console.log(`Skipping wall ad "${wall.name}" due to potential overlap`);
+        continue;
+      }
       
       // Get a random ad text
       const adText = this.getRandomAdText();
       
-      // Create the ad using our new WallAdStyle
+      // Create the ad using WallAdStyle
       const ad = new Ad(
         this.scene,
         wall.position,
@@ -258,7 +312,14 @@ export class AdManager {
       // Store in ad array
       this.ads.push(ad);
       
-      console.log(`Created wall ad #${i+1} with text "${adText}"`);
+      // Track this ad for overlap checking
+      placedAds.push({
+        position: wall.position.clone(),
+        size: { width: wall.width, height: wall.height },
+        direction: wall.direction
+      });
+      
+      console.log(`Created wall ad "${wall.name}" with text "${adText}" (${wall.width.toFixed(1)}x${wall.height.toFixed(1)})`);
     }
     
     this.obstacles = [...this.obstacles, ...newObstacles];
