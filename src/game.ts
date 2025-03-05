@@ -260,7 +260,7 @@ function setupEventListeners(): void {
 // Create the ground
 function createGround(): void {
   const groundGeometry = new THREE.PlaneGeometry(200, 200);
-  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x254117 }); // Forest green
+  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 }); // Forest green
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -269,7 +269,7 @@ function createGround(): void {
 
 // Create lighting
 function createLighting(): void {
-  const ambientLight = new THREE.AmbientLight(0x404040);
+  const ambientLight = new THREE.AmbientLight(0xf0f0f0);
   scene.add(ambientLight);
 
   const directionalLight = new THREE.DirectionalLight(0xffffff, 1);

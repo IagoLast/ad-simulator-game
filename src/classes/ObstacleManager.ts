@@ -11,6 +11,10 @@ export class ObstacleManager {
     'www.TheirStack.com',
   ];
   
+  // Define world boundaries
+  private worldSize: number = 100; // Size of world (goes from -worldSize to +worldSize)
+  private wallHeight: number = 100; // Height of the boundary walls
+  
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
@@ -19,6 +23,9 @@ export class ObstacleManager {
     // Create both cubes and billboards
     this.createCubeObstacles(Math.floor(count * 0.6)); // 60% of count will be cubes
     this.createBillboards(Math.ceil(count * 0.4)); // 40% of count will be billboards
+    
+    // Create boundary walls
+    this.createBoundaryWalls();
   }
   
   private createCubeObstacles(count: number): void {
@@ -30,10 +37,12 @@ export class ObstacleManager {
       const material = new THREE.MeshLambertMaterial({ color: 0x8b4513 }); // Brown
       const obstacleMesh = new THREE.Mesh(geometry, material);
       
-      // Random position
-      const x = Math.random() * 180 - 90;
+      // Random position within world boundaries (add a small margin)
+      const margin = 5;
+      const maxDistance = this.worldSize - margin;
+      const x = Math.random() * (maxDistance * 2) - maxDistance;
       const y = height / 2;
-      const z = Math.random() * 180 - 90;
+      const z = Math.random() * (maxDistance * 2) - maxDistance;
       
       obstacleMesh.position.set(x, y, z);
       obstacleMesh.castShadow = true;
@@ -67,26 +76,35 @@ export class ObstacleManager {
       // Choose a distribution pattern
       const pattern = Math.floor(Math.random() * 3);
       
+      // Maximum distance from center respecting world boundaries
+      const margin = 5;
+      const maxDistance = this.worldSize - margin;
+      
       if (pattern === 0) {
         // Grid-like pattern with some randomness
-        const gridSize = 25;
-        const gridX = Math.floor(Math.random() * 8) - 4;
-        const gridZ = Math.floor(Math.random() * 8) - 4;
+        const gridSize = Math.min(25, maxDistance / 4); // Ensure grid fits within world
+        const gridLimit = Math.floor(maxDistance / gridSize);
+        const gridX = Math.floor(Math.random() * (gridLimit * 2)) - gridLimit;
+        const gridZ = Math.floor(Math.random() * (gridLimit * 2)) - gridLimit;
         x = gridX * gridSize + (Math.random() * 10 - 5);
         z = gridZ * gridSize + (Math.random() * 10 - 5);
+        
+        // Ensure within boundaries
+        x = Math.max(-maxDistance, Math.min(maxDistance, x));
+        z = Math.max(-maxDistance, Math.min(maxDistance, z));
       } 
       else if (pattern === 1) {
         // Circular pattern with rings
         const ringCount = 3;
         const ringIndex = Math.floor(Math.random() * ringCount);
-        const radius = 30 + ringIndex * 25; // 30, 55, 80 units from center
+        const radius = Math.min(30 + ringIndex * 25, maxDistance); // 30, 55, 80 units from center, up to maxDistance
         const angle = Math.random() * Math.PI * 2;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius;
       }
       else {
-        // Completely random
-        const radius = 20 + Math.random() * 80; // Between 20-100 units from center
+        // Completely random but within boundaries
+        const radius = Math.min(20 + Math.random() * 80, maxDistance); // Between 20-100 units from center, capped at maxDistance
         const angle = Math.random() * Math.PI * 2;
         x = Math.cos(angle) * radius;
         z = Math.sin(angle) * radius;
@@ -141,6 +159,70 @@ export class ObstacleManager {
     }
   }
   
+  /**
+   * Creates walls at the boundary of the world to prevent players, bots and projectiles from escaping
+   */
+  private createBoundaryWalls(): void {
+    const wallThickness = 2;
+    const wallColor = 0x555555; // Dark gray color for the walls
+    
+    // Create material with slight transparency for visibility
+    const wallMaterial = new THREE.MeshLambertMaterial({ 
+      color: wallColor,
+      transparent: true,
+      opacity: 0.7
+    });
+    
+    // Create the four walls (North, South, East, West)
+    const walls = [
+      // North wall (positive Z)
+      {
+        size: new THREE.Vector3(this.worldSize * 2 + wallThickness * 2, this.wallHeight, wallThickness),
+        position: new THREE.Vector3(0, this.wallHeight / 2, this.worldSize)
+      },
+      // South wall (negative Z)
+      {
+        size: new THREE.Vector3(this.worldSize * 2 + wallThickness * 2, this.wallHeight, wallThickness),
+        position: new THREE.Vector3(0, this.wallHeight / 2, -this.worldSize)
+      },
+      // East wall (positive X)
+      {
+        size: new THREE.Vector3(wallThickness, this.wallHeight, this.worldSize * 2),
+        position: new THREE.Vector3(this.worldSize, this.wallHeight / 2, 0)
+      },
+      // West wall (negative X)
+      {
+        size: new THREE.Vector3(wallThickness, this.wallHeight, this.worldSize * 2),
+        position: new THREE.Vector3(-this.worldSize, this.wallHeight / 2, 0)
+      }
+    ];
+    
+    // Create each wall and add it to the scene and obstacles array
+    walls.forEach(wallDef => {
+      const geometry = new THREE.BoxGeometry(wallDef.size.x, wallDef.size.y, wallDef.size.z);
+      const wallMesh = new THREE.Mesh(geometry, wallMaterial);
+      
+      wallMesh.position.copy(wallDef.position);
+      wallMesh.castShadow = true;
+      wallMesh.receiveShadow = true;
+      
+      this.scene.add(wallMesh);
+      
+      // Add to obstacles for collision detection
+      const obstacle: Obstacle = {
+        mesh: wallMesh,
+        collider: {
+          position: wallDef.position.clone(),
+          size: wallDef.size.clone()
+        }
+      };
+      
+      this.obstacles.push(obstacle);
+    });
+    
+    console.log("Boundary walls created");
+  }
+  
   public getObstacles(): Obstacle[] {
     return this.obstacles;
   }
@@ -151,12 +233,20 @@ export class ObstacleManager {
   
   public findSpawnPosition(): THREE.Vector3 {
     // Find a safe spawn position away from obstacles
-    let spawnX = Math.random() * 180 - 90;
-    let spawnZ = Math.random() * 180 - 90;
+    // Use the worldSize property to constrain the spawn position
+    const safeMargin = 10; // Stay at least 10 units away from the walls
+    const maxDistance = this.worldSize - safeMargin;
+    
+    let spawnX = Math.random() * (maxDistance * 2) - maxDistance;
+    let spawnZ = Math.random() * (maxDistance * 2) - maxDistance;
     
     // Ensure player doesn't spawn inside an obstacle
     let validSpawn = false;
-    while (!validSpawn) {
+    let attempts = 0;
+    const maxAttempts = 100; // Prevent infinite loops
+    
+    while (!validSpawn && attempts < maxAttempts) {
+      attempts++;
       validSpawn = true;
       for (const obstacle of this.obstacles) {
         const obstaclePos = obstacle.mesh.position;
@@ -164,13 +254,24 @@ export class ObstacleManager {
           Math.pow(spawnX - obstaclePos.x, 2) + 
           Math.pow(spawnZ - obstaclePos.z, 2)
         );
-        if (distance < 3) {
+        
+        // Check distance from obstacle (consider obstacle size)
+        const obstacleSize = obstacle.collider.size;
+        const minSafeDistance = 3 + Math.max(obstacleSize.x, obstacleSize.z) / 2;
+        
+        if (distance < minSafeDistance) {
           validSpawn = false;
-          spawnX = Math.random() * 180 - 90;
-          spawnZ = Math.random() * 180 - 90;
+          spawnX = Math.random() * (maxDistance * 2) - maxDistance;
+          spawnZ = Math.random() * (maxDistance * 2) - maxDistance;
           break;
         }
       }
+    }
+    
+    if (attempts >= maxAttempts) {
+      console.warn("Couldn't find ideal spawn position after max attempts. Using fallback position.");
+      // Fallback to a position we know is safe (center of the world, but elevated)
+      return new THREE.Vector3(0, 5, 0);
     }
     
     return new THREE.Vector3(spawnX, 1.8, spawnZ);
