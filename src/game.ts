@@ -498,8 +498,8 @@ function init(): void {
   // Initialize weapon system
   weaponManager = new WeaponManager(scene, player);
   
-  // Mostrar información del arma inicial
-  weaponManager.displayWeaponInfo();
+  // Create a flag for the player to find
+  createFlag();
   
   // Setup event listeners
   setupEventListeners();
@@ -514,9 +514,6 @@ function init(): void {
   
   // Update health display
   player.updateHealthDisplay();
-  
-  // Create flag after obstacles are created
-  createFlag();
   
   // Start the flag timer when the game starts
   flagCaptureTimer = FLAG_CAPTURE_TIME_LIMIT;

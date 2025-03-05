@@ -48,6 +48,13 @@ export class WeaponManager {
     this.weapons.push(paintballGun);
     this.weapons.push(waterBalloonLauncher);
     this.weapons.push(rapidFire);
+    
+    // Set this WeaponManager as the manager for each weapon
+    this.weapons.forEach(weapon => {
+      if (weapon instanceof WaterBalloonLauncher) {
+        weapon.setWeaponManager(this);
+      }
+    });
 
     console.log("Armas inicializadas:", this.weapons.length);
     
@@ -595,5 +602,169 @@ export class WeaponManager {
         cooldownText.textContent = '';
       }
     }
+  }
+
+  /**
+   * Applies area damage to objects within a radius
+   * @param center Center of the explosion
+   * @param radius Radius of the explosion effect
+   * @param maxDamage Maximum damage at the center of the explosion
+   */
+  public applyAreaDamage(center: THREE.Vector3, radius: number, maxDamage: number): void {
+    console.log(`Applying area damage at (${center.x.toFixed(2)}, ${center.y.toFixed(2)}, ${center.z.toFixed(2)})`);
+    console.log(`Radius: ${radius}, Max Damage: ${maxDamage}`);
+    
+    // Add screen shake effect for more impact
+    this.applyScreenShake(radius * 0.25); // intensity based on explosion radius
+    
+    // Create a permanent scorch mark on the ground
+    this.createScorchMark(center, radius * 1.2);
+    
+    // Get all obstacles from the obstacle manager
+    const obstacles = this.obstacleManager.getObstacles();
+    
+    // Check each obstacle for damage
+    obstacles.forEach(obstacle => {
+      // Get the position of the obstacle
+      const obstaclePosition = obstacle.mesh.position.clone();
+      
+      // Calculate distance from explosion center
+      const distance = center.distanceTo(obstaclePosition);
+      
+      // If within explosion radius, apply damage based on distance
+      if (distance <= radius) {
+        // Calculate damage (linear falloff with distance)
+        const distanceRatio = 1 - (distance / radius);
+        const damage = Math.floor(maxDamage * distanceRatio);
+        
+        // In a real implementation, apply damage to the obstacle
+        console.log(`Obstacle hit by explosion! Distance: ${distance.toFixed(2)}, Damage: ${damage}`);
+        
+        // Create a splash effect at the hit position
+        const normal = new THREE.Vector3().subVectors(obstaclePosition, center).normalize();
+        const hitPosition = center.clone().add(normal.multiplyScalar(distance));
+        
+        // Create paint splash with blue color for water explosion
+        this.createPaintSplash(hitPosition, 0x00aaff, obstacle.mesh);
+      }
+    });
+    
+    // Also check if the player is within the explosion radius
+    const playerPosition = this.player.controls.getObject().position.clone();
+    const playerDistance = center.distanceTo(playerPosition);
+    
+    if (playerDistance <= radius) {
+      // Calculate damage to player based on distance
+      const distanceRatio = 1 - (playerDistance / radius);
+      const damage = Math.floor(maxDamage * distanceRatio * 0.3); // Reduce self-damage
+      
+      // In a real implementation, apply damage to the player
+      console.log(`Player hit by explosion! Distance: ${playerDistance.toFixed(2)}, Damage: ${damage}`);
+      
+      // Let the player know they were hit
+      // this.player.takeDamage(damage);
+    }
+  }
+  
+  /**
+   * Creates a screen shake effect for explosions
+   * @param intensity The intensity of the shake effect
+   */
+  private applyScreenShake(intensity: number = 1.0): void {
+    if (!this.player.controls) return;
+    
+    const camera = this.player.controls.getObject();
+    if (!camera) return;
+    
+    // Save the original camera position
+    const originalPosition = camera.position.clone();
+    
+    // Set up shake parameters
+    const shakeDuration = 350; // milliseconds
+    const startTime = Date.now();
+    
+    // Define the shake animation
+    const shakeAnimation = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / shakeDuration;
+      
+      if (progress < 1.0) {
+        // Generate random offsets for the camera position
+        const offsetX = (Math.random() * 2 - 1) * intensity * (1 - progress);
+        const offsetY = (Math.random() * 2 - 1) * intensity * (1 - progress);
+        const offsetZ = (Math.random() * 2 - 1) * intensity * (1 - progress);
+        
+        // Apply the offsets to the camera
+        camera.position.set(
+          originalPosition.x + offsetX,
+          originalPosition.y + offsetY,
+          originalPosition.z + offsetZ
+        );
+        
+        // Continue the animation
+        requestAnimationFrame(shakeAnimation);
+      } else {
+        // Reset to original position when done
+        camera.position.copy(originalPosition);
+      }
+    };
+    
+    // Start the shake animation
+    shakeAnimation();
+  }
+
+  /**
+   * Creates a scorch mark on the ground from an explosion
+   * @param position The center of the explosion
+   * @param radius The radius of the scorch mark
+   */
+  private createScorchMark(position: THREE.Vector3, radius: number): void {
+    // Create a disc geometry for the scorch mark
+    const segments = 32;
+    const scorchGeometry = new THREE.CircleGeometry(radius, segments);
+    
+    // Create a material with a dark color, slightly transparent
+    const scorchMaterial = new THREE.MeshBasicMaterial({
+      color: 0x222222,
+      transparent: true,
+      opacity: 0.6,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    
+    // Create the mesh
+    const scorchMark = new THREE.Mesh(scorchGeometry, scorchMaterial);
+    
+    // Position just above the ground to avoid z-fighting
+    scorchMark.position.set(position.x, 0.01, position.z);
+    scorchMark.rotation.x = -Math.PI / 2; // Rotate to lie flat on the ground
+    
+    // Add to scene
+    this.scene.add(scorchMark);
+    
+    // Optionally, animate the opacity to fade out over time
+    const startTime = Date.now();
+    const duration = 10000; // 10 seconds fade
+    
+    const fadeAnimation = () => {
+      const elapsed = Date.now() - startTime;
+      
+      if (elapsed < duration) {
+        // Calculate opacity
+        const progress = elapsed / duration;
+        scorchMaterial.opacity = 0.6 * (1 - progress);
+        
+        // Continue animation
+        requestAnimationFrame(fadeAnimation);
+      } else {
+        // Remove from scene when fully faded
+        this.scene.remove(scorchMark);
+        scorchGeometry.dispose();
+        scorchMaterial.dispose();
+      }
+    };
+    
+    // Start the animation
+    fadeAnimation();
   }
 } 

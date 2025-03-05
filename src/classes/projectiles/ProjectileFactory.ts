@@ -4,6 +4,7 @@ import { PaintballProjectile } from './PaintballProjectile';
 import { BounceBallProjectile } from './BounceBallProjectile';
 import { ClusterBallProjectile } from './ClusterBallProjectile';
 import { SniperProjectile } from './SniperProjectile';
+import { ExplosiveProjectile } from './ExplosiveProjectile';
 import { ProjectileType } from '../../types';
 
 /**
@@ -76,6 +77,26 @@ export class ProjectileFactory {
           options.clusterCount
         );
         
+      case ProjectileType.EXPLOSIVE:
+        if (!options.damageCallback) {
+          console.error('ExplosiveProjectile requires damageCallback');
+          // Fall back to a regular paintball if callback is missing
+          return new PaintballProjectile(position, direction, scene, color);
+        }
+        
+        return new ExplosiveProjectile(
+          position,
+          direction,
+          scene,
+          options.damageCallback,
+          color,
+          options.speed,
+          options.damage,
+          options.lifespan,
+          options.radius,
+          options.explosionRadius
+        );
+        
       case ProjectileType.SNIPER:
         return new SniperProjectile(
           position,
@@ -123,4 +144,10 @@ export interface ProjectileOptions {
   
   /** For ClusterBall: Callback to add spawned projectiles to the main array */
   addProjectileCallback?: (projectile: BaseProjectile) => void;
+  
+  /** For ExplosiveProjectile: Radius of the explosion effect */
+  explosionRadius?: number;
+  
+  /** For ExplosiveProjectile: Callback to damage entities in the explosion radius */
+  damageCallback?: (position: THREE.Vector3, radius: number, damage: number) => void;
 } 

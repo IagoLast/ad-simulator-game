@@ -113,5 +113,8 @@ export enum ProjectileType {
   SNIPER = 'sniper',
   
   /** Projectile with a trail effect */
-  TRACER = 'tracer'
+  TRACER = 'tracer',
+  
+  /** Explosive projectile that causes area damage */
+  EXPLOSIVE = 'explosive'
 } 
