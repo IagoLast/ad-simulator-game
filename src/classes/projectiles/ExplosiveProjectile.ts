@@ -112,7 +112,7 @@ export class ExplosiveProjectile extends BaseProjectile {
    * Updates visual effects for the explosive
    * @param delta Time since last frame in seconds
    */
-  protected updateEffects(delta: number): void {
+  protected updateEffects(_: number): void {
     if (this.trail) {
       // Update the trail particles
       const positions = (this.trail.geometry as THREE.BufferGeometry).getAttribute('position');

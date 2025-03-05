@@ -32,11 +32,12 @@ export class Flag {
     radius: number;
   };
   
-  /** Reference to the scene for adding/removing the flag */
-  private scene: THREE.Scene;
-  
+  /**
+   * 
+   * @param scene - Not used for now
+   * @param position - Position of the flag
+   */
   constructor(scene: THREE.Scene, position: THREE.Vector3) {
-    this.scene = scene;
     
     // Create the flag mesh (balloon-like)
     this.mesh = new THREE.Group();
