@@ -628,33 +628,13 @@ function showWinScreen(): void {
   controls.unlock();
 }
 
-// Restart the game
+/**
+ * Restarts the game.
+ * For now just performs a window reload.
+ * Future versions should include a proper game restart.
+ */
 function restartGame(): void {
-  // Remove existing flag
-  if (flag && flag.mesh) {
-    scene.remove(flag.mesh);
-  }
-  
-  // Reset bot manager
-  if (botManager) {
-    botManager.clearBots();
-  }
-  
-  // Create new obstacles
-  obstacleManager.createObstacles();
-  
-  // Create new flag
-  createFlag();
-  
-  // Reset player position and health
-  const spawnPosition = obstacleManager.findSpawnPosition();
-  player.spawn(spawnPosition);
-  player.health = 100;
-  player.updateHealthDisplay();
-  
-  // Reset game state
-  gameState.health = 100;
-  gameState.velocity.set(0, 0, 0);
+  window.location.reload();
 }
 
 // Start the game
