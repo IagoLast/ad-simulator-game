@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { io, Socket } from 'socket.io-client';
-import { EntityType, GameState, MapData, PlayerMovement, PlayerState, SocketEvents, ShootEvent, WeaponType, HitEvent } from '../../shared/types';
+import { EntityType, GameState, MapData, PlayerMovement, PlayerState, SocketEvents, ShootEvent, WeaponType, HitEvent, WeaponConfig } from '../../shared/types';
 import { Controls } from './Controls';
 import { Player } from './Player';
 import { MapRenderer } from './core/MapRenderer';
@@ -506,6 +506,8 @@ export class Game {
       teamId: number,
       position: { x: number, y: number, z: number },
       direction: { x: number, y: number, z: number },
+      speed: number,
+      gravity: number,
       weaponType: WeaponType
     }) => {
       // Skip if this is our own projectile (we already created it locally)
@@ -517,7 +519,8 @@ export class Game {
       const position = new THREE.Vector3(data.position.x, data.position.y, data.position.z);
       const direction = new THREE.Vector3(data.direction.x, data.direction.y, data.direction.z);
       
-      this.createProjectileVisual(position, direction, data.teamId);
+      // Pass server-defined physics parameters
+      this.createProjectileVisual(position, direction, data.teamId, data.speed, data.gravity);
     });
     
     // Handle player hit events
@@ -897,6 +900,10 @@ export class Game {
     const shotData = this.localPlayer.shoot();
     if (!shotData) return; // Can't shoot yet
     
+    // Get weapon configuration
+    const weaponType = WeaponType.PAINTBALL_GUN;
+    const weaponSettings = WeaponConfig[weaponType];
+    
     // Create shoot event data
     const shootEvent: ShootEvent = {
       playerId: this.socket.id,
@@ -910,7 +917,7 @@ export class Game {
         y: shotData.direction.y,
         z: shotData.direction.z
       },
-      weaponType: WeaponType.PAINTBALL_GUN
+      weaponType: weaponType
     };
     
     // Send shoot event to server
@@ -920,7 +927,9 @@ export class Game {
     this.createProjectileVisual(
       new THREE.Vector3(shotData.position.x, shotData.position.y, shotData.position.z),
       new THREE.Vector3(shotData.direction.x, shotData.direction.y, shotData.direction.z),
-      this.localPlayer.getTeamId()
+      this.localPlayer.getTeamId(),
+      weaponSettings.speed,
+      weaponSettings.gravity
     );
     
     // Add sound effect for shooting
@@ -931,8 +940,19 @@ export class Game {
   
   /**
    * Create a visual projectile without physics (for effects only)
+   * @param position - Initial position of projectile
+   * @param direction - Direction vector the projectile is moving
+   * @param teamId - Team ID (determines color)
+   * @param speed - Optional speed override (if not provided, uses default)
+   * @param gravity - Optional gravity override (if not provided, uses default)
    */
-  private createProjectileVisual(position: THREE.Vector3, direction: THREE.Vector3, teamId: number): void {
+  private createProjectileVisual(
+    position: THREE.Vector3, 
+    direction: THREE.Vector3, 
+    teamId: number,
+    speed?: number,
+    gravity?: number
+  ): void {
     // Get color based on team
     const color = teamId === 1 ? 0xFF3333 : 0x3333FF;
     
@@ -952,17 +972,20 @@ export class Game {
     // Add to scene
     this.scene.add(projectile);
     
+    // Get default weapon settings for fallback
+    const defaultSettings = WeaponConfig[WeaponType.PAINTBALL_GUN];
+    
     // Animate projectile
-    const speed = 30; // Units per second
-    const maxDistance = 50; // Max travel distance
+    const projectileSpeed = speed || defaultSettings.speed; // Use provided speed or default
+    const maxDistance = defaultSettings.maxDistance; // Max travel distance
     const startPosition = position.clone();
-    const gravity = 9.8; // Gravity acceleration (m/s²)
+    const projectileGravity = gravity !== undefined ? gravity : defaultSettings.gravity; // Use provided gravity or default
     
     // Use a normalized direction vector
     const normalizedDirection = direction.clone().normalize();
     
     // Initial velocity
-    const velocity = normalizedDirection.clone().multiplyScalar(speed);
+    const velocity = normalizedDirection.clone().multiplyScalar(projectileSpeed);
     
     // Time tracking for physics
     let elapsedTime = 0;
@@ -980,7 +1003,7 @@ export class Game {
       previousPosition.copy(projectile.position);
       
       // Apply gravity to velocity
-      velocity.y -= gravity * timeStep;
+      velocity.y -= projectileGravity * timeStep;
       
       // Calculate new position
       const newPosition = projectile.position.clone().add(velocity.clone().multiplyScalar(timeStep));

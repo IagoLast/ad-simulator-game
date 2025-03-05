@@ -135,11 +135,25 @@ export interface Weapon {
 }
 
 /**
- * Weapon types
+ * Weapon types available in the game
  */
 export enum WeaponType {
-  PAINTBALL_GUN = 'paintball_gun'
+  PAINTBALL_GUN = 'PAINTBALL_GUN'
 }
+
+/**
+ * Weapon physics configuration
+ * Used by both server and client to ensure consistent projectile behavior
+ */
+export const WeaponConfig = {
+  [WeaponType.PAINTBALL_GUN]: {
+    speed: 30,         // Projectile speed (units per second)
+    gravity: 9.8,      // Gravity effect (units per second squared)
+    damage: 1,         // Damage per hit
+    cooldown: 0.5,     // Seconds between shots
+    maxDistance: 50    // Maximum distance projectile can travel
+  }
+};
 
 /**
  * Events sent between client and server

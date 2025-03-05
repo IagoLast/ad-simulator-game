@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { EntityType, Exit, GameState, HitEvent, MapData, PlayerMovement, PlayerState, ShootEvent, SocketEvents, WeaponType } from '../../shared/types';
+import { EntityType, Exit, GameState, HitEvent, MapData, PlayerMovement, PlayerState, ShootEvent, SocketEvents, WeaponType, WeaponConfig } from '../../shared/types';
 import { MapGenerator } from './MapGenerator';
 
 /**
@@ -14,7 +14,7 @@ class Projectile {
   public speed: number;
   public damage: number;
   public timestamp: number;
-  private gravity: number = 9.8; // Gravity acceleration (m/s²)
+  public gravity: number = 9.8; // Changed from private to public for accessibility
   
   constructor(
     id: string,
@@ -409,14 +409,8 @@ export class GameServer {
         // Create a new projectile
         const projectileId = `${socket.id}_${++this.lastProjectileId}`;
         
-        let damage = 1; // Default damage
-        let speed = 30; // Default speed
-        
-        // Adjust properties based on weapon type
-        if (shootEvent.weaponType === WeaponType.PAINTBALL_GUN) {
-          damage = 1; // 3 hits to kill
-          speed = 30;
-        }
+        // Get weapon configuration
+        const weaponSettings = WeaponConfig[shootEvent.weaponType];
         
         const projectile = new Projectile(
           projectileId,
@@ -424,9 +418,12 @@ export class GameServer {
           player.teamId,
           shootEvent.position,
           shootEvent.direction,
-          speed,
-          damage
+          weaponSettings.speed,
+          weaponSettings.damage
         );
+        
+        // Override gravity with configured value
+        projectile.gravity = weaponSettings.gravity;
         
         // Add to projectiles list
         this.projectiles.push(projectile);
@@ -438,6 +435,8 @@ export class GameServer {
           teamId: player.teamId,
           position: shootEvent.position,
           direction: shootEvent.direction,
+          speed: projectile.speed,
+          gravity: projectile.gravity,
           weaponType: shootEvent.weaponType
         });
       });
