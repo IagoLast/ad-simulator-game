@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Billboard, EntityType, MapData, MapEntity } from '../../../shared/types';
+import { Billboard, EntityType, Flag, MapData, MapEntity } from '../../../shared/types';
 
 /**
  * MapRenderer class for rendering map entities like walls and exits
@@ -7,6 +7,7 @@ import { Billboard, EntityType, MapData, MapEntity } from '../../../shared/types
 export class MapRenderer {
   private scene: THREE.Scene;
   private mapEntities: THREE.Object3D[] = [];
+  private flagObject: THREE.Object3D | null = null;
   
   /**
    * Create a new MapRenderer
@@ -31,12 +32,38 @@ export class MapRenderer {
         if (object) {
           this.scene.add(object);
           this.mapEntities.push(object);
+          
+          // Store reference to flag object if it's a flag
+          if (entity.type === EntityType.FLAG) {
+            this.flagObject = object;
+          }
         }
       });
     }
     
     // Add a ground plane
     this.addGround(mapData.width, mapData.height);
+  }
+  
+  /**
+   * Get the flag object for collision detection
+   */
+  public getFlag(): THREE.Object3D | null {
+    return this.flagObject;
+  }
+  
+  /**
+   * Remove the flag from the scene (when captured)
+   */
+  public removeFlag(): void {
+    if (this.flagObject) {
+      this.scene.remove(this.flagObject);
+      const index = this.mapEntities.indexOf(this.flagObject);
+      if (index > -1) {
+        this.mapEntities.splice(index, 1);
+      }
+      this.flagObject = null;
+    }
   }
   
   /**
@@ -78,6 +105,8 @@ export class MapRenderer {
         return this.createExit(entity);
       case EntityType.BILLBOARD:
         return this.createBillboard(entity as Billboard);
+      case EntityType.FLAG:
+        return this.createFlag(entity as Flag);
       default:
         console.warn(`Unknown entity type: ${entity.type}`);
         return null;
@@ -363,5 +392,129 @@ export class MapRenderer {
     
     this.scene.add(ground);
     this.mapEntities.push(ground);
+  }
+  
+  /**
+   * Create a flag object
+   * @param entity Flag entity data
+   * @returns THREE.Group representing the flag
+   */
+  private createFlag(entity: Flag): THREE.Group {
+    const flagGroup = new THREE.Group();
+    const dimensions = entity.dimensions || { width: 1.5, height: 2, depth: 0.1 };
+    
+    // Create flag pole (cylinder)
+    const poleGeometry = new THREE.CylinderGeometry(0.05, 0.05, dimensions.height, 8);
+    const poleMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x8B4513, // Brown
+      metalness: 0.3,
+      roughness: 0.8
+    });
+    
+    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+    pole.position.y = dimensions.height / 2;
+    flagGroup.add(pole);
+    
+    // Create flag (rectangular plane)
+    const flagGeometry = new THREE.PlaneGeometry(dimensions.width, dimensions.height * 0.5);
+    const flagMaterial = new THREE.MeshStandardMaterial({
+      color: 0xFFD700, // Gold
+      side: THREE.DoubleSide,
+      emissive: 0xFFD700,
+      emissiveIntensity: 0.3
+    });
+    
+    const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+    flag.position.set(dimensions.width * 0.4, dimensions.height * 0.7, 0);
+    flagGroup.add(flag);
+    
+    // Add a small sphere on top of the pole
+    const topSphereGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+    const topSphereMaterial = new THREE.MeshStandardMaterial({
+      color: 0xE0E0E0, // Light gray
+      metalness: 0.8,
+      roughness: 0.2
+    });
+    
+    const topSphere = new THREE.Mesh(topSphereGeometry, topSphereMaterial);
+    topSphere.position.y = dimensions.height;
+    flagGroup.add(topSphere);
+    
+    // Set the overall position
+    flagGroup.position.set(
+      entity.position.x,
+      entity.position.y,
+      entity.position.z
+    );
+    
+    // Add to userData for collision detection
+    flagGroup.userData.type = EntityType.FLAG;
+    flagGroup.userData.isCollidable = false; // Not for wall collision but for player interaction
+    flagGroup.userData.isFlag = true;
+    
+    // Enable shadows
+    flagGroup.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        object.castShadow = true;
+        object.receiveShadow = true;
+      }
+    });
+    
+    // Add animation to make the flag wave
+    this.addFlagWaveAnimation(flag);
+    
+    return flagGroup;
+  }
+  
+  /**
+   * Add waving animation to the flag
+   * @param flagMesh The flag mesh to animate
+   */
+  private addFlagWaveAnimation(flagMesh: THREE.Mesh): void {
+    // Create vertices for the flag (we need to modify these for the animation)
+    const geometry = flagMesh.geometry as THREE.PlaneGeometry;
+    
+    // Store original positions to animate from
+    const originalVertices: THREE.Vector3[] = [];
+    const positions = geometry.attributes.position.array;
+    
+    for (let i = 0; i < positions.length; i += 3) {
+      originalVertices.push(new THREE.Vector3(
+        positions[i], 
+        positions[i + 1], 
+        positions[i + 2]
+      ));
+    }
+    
+    // Animation function to be called every frame
+    const animate = () => {
+      const time = Date.now() * 0.002;
+      
+      // Update vertices to create a wave effect
+      for (let i = 0; i < originalVertices.length; i++) {
+        const vertex = originalVertices[i];
+        const pos = geometry.attributes.position;
+        
+        // Only apply wave to vertices away from the pole (right side)
+        if (vertex.x > 0) {
+          // Create a wave effect based on distance from pole and time
+          const waveX = Math.sin(time + vertex.y) * 0.1 * (vertex.x / 2);
+          const waveZ = Math.cos(time + vertex.y) * 0.05 * (vertex.x / 2);
+          
+          pos.setXYZ(
+            i,
+            vertex.x + waveX,
+            vertex.y,
+            vertex.z + waveZ
+          );
+        }
+      }
+      
+      geometry.attributes.position.needsUpdate = true;
+      requestAnimationFrame(animate);
+    };
+    
+    // Start the animation
+    animate();
   }
 } 

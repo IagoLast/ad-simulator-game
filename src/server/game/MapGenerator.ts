@@ -1,4 +1,4 @@
-import { Billboard, EntityType, Exit, MapData, MapEntity, Wall } from '../../shared/types';
+import { Billboard, EntityType, Exit, Flag, MapData, MapEntity, Wall } from '../../shared/types';
 
 /**
  * Gap definition for maze wall openings
@@ -47,6 +47,9 @@ export class MapGenerator {
     
     // Add billboards as obstacles
     this.addBillboards(entities);
+    
+    // Add the flag for capture the flag gameplay
+    this.addFlag(entities);
     
     return {
       width: this.width,
@@ -636,5 +639,30 @@ export class MapGenerator {
         text: text
       } as Billboard);
     }
+  }
+  
+  /**
+   * Add a flag to the center area of the map for CTF gameplay
+   * @param entities Array of map entities to add flag to
+   */
+  private addFlag(entities: MapEntity[]): void {
+    // Flag dimensions
+    const flagHeight = 2;
+    const flagPoleWidth = 0.1;
+    const flagWidth = 1.5;
+    
+    // Place flag near the center of the map, but with some randomness
+    // Random position within central area (±5 units from center)
+    const x = (Math.random() * 10 - 5);
+    const z = (Math.random() * 10 - 5);
+    
+    // Add the flag entity
+    entities.push({
+      type: EntityType.FLAG,
+      position: { x, y: flagHeight / 2, z },
+      dimensions: { width: flagWidth, height: flagHeight, depth: flagPoleWidth }
+    } as Flag);
+    
+    console.log(`Flag placed at position (${x}, ${z})`);
   }
 } 

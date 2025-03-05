@@ -14,6 +14,7 @@ export interface PlayerState {
   };
   color: string;
   teamId: number; // Team 1 or Team 2
+  hasFlag?: boolean; // Indicates if player is carrying the flag
 }
 
 /**
@@ -22,7 +23,8 @@ export interface PlayerState {
 export enum EntityType {
   WALL = 'wall',
   EXIT = 'exit',
-  BILLBOARD = 'billboard'
+  BILLBOARD = 'billboard',
+  FLAG = 'flag'
 }
 
 /**
@@ -72,6 +74,14 @@ export interface Billboard extends MapEntity {
 }
 
 /**
+ * Flag entity for capture the flag gameplay
+ */
+export interface Flag extends MapEntity {
+  type: EntityType.FLAG;
+  carrier?: string; // ID of the player carrying the flag, if any
+}
+
+/**
  * Map data containing all entities
  */
 export interface MapData {
@@ -86,6 +96,9 @@ export interface MapData {
 export interface GameState {
   players: PlayerState[];
   map?: MapData;
+  flagCarrier?: string; // ID of player carrying the flag
+  gameOver?: boolean;
+  winningTeam?: number;
 }
 
 /**
@@ -98,6 +111,10 @@ export enum SocketEvents {
   PLAYER_MOVED = 'player_moved',
   GAME_STATE = 'game_state',
   MAP_DATA = 'map_data',
+  FLAG_CAPTURED = 'flag_captured',
+  FLAG_RETURNED = 'flag_returned',
+  GAME_OVER = 'game_over',
+  GAME_RESTART = 'game_restart'
 }
 
 /**

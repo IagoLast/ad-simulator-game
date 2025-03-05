@@ -21,6 +21,8 @@ export class Player {
   private eyes: THREE.Group;
   private teamId: number;
   private teamIndicator: THREE.Mesh;
+  private flag: THREE.Group | null = null; // Reference to flag object when carrying
+  private hasFlag: boolean = false;
   
   /**
    * Create a new player
@@ -36,6 +38,7 @@ export class Player {
     };
     this.lastSentPosition = this.position.clone();
     this.teamId = playerState.teamId;
+    this.hasFlag = playerState.hasFlag || false;
     
     // Create player mesh
     this.mesh = new THREE.Group();
@@ -119,27 +122,53 @@ export class Player {
       }
     }
     
+    // If player has the flag, create and attach it
+    if (this.hasFlag) {
+      this.addFlagToPlayer();
+    }
+    
     // Update initial transform
     this.updateMeshTransform();
   }
   
   /**
-   * Update player from state
+   * Update player from state received from server
+   * @param playerState Updated player state from server
    */
   public updateFromState(playerState: PlayerState): void {
-    this.updatePosition(playerState.position);
-    this.updateRotation(playerState.rotation);
-    
-    // Update team ID and color if changed
-    if (this.teamId !== playerState.teamId) {
-      this.teamId = playerState.teamId;
+    // Update position if changed significantly
+    if (
+      Math.abs(playerState.position.x - this.position.x) > 0.01 ||
+      Math.abs(playerState.position.y - this.position.y) > 0.01 ||
+      Math.abs(playerState.position.z - this.position.z) > 0.01
+    ) {
+      this.position.set(playerState.position.x, playerState.position.y, playerState.position.z);
     }
     
-    // Update team indicator color
-    if (this.teamIndicator.material instanceof THREE.MeshStandardMaterial) {
-      this.teamIndicator.material.color.set(playerState.color);
-      this.teamIndicator.material.emissive.set(playerState.color);
+    // Update rotation
+    this.rotation.y = playerState.rotation.y;
+    if (playerState.rotation.x !== undefined) {
+      this.rotation.x = playerState.rotation.x;
     }
+    
+    // Check if flag status has changed
+    const newHasFlag = playerState.hasFlag || false;
+    console.log(`Player ${this.id} flag status update - old: ${this.hasFlag}, new: ${newHasFlag}`);
+    
+    if (newHasFlag !== this.hasFlag) {
+      this.hasFlag = newHasFlag;
+      
+      if (this.hasFlag) {
+        console.log(`Player ${this.id} now has the flag, adding visual representation`);
+        this.addFlagToPlayer();
+      } else {
+        console.log(`Player ${this.id} no longer has the flag, removing visual representation`);
+        this.removeFlagFromPlayer();
+      }
+    }
+    
+    // Update mesh position and rotation
+    this.updateMeshTransform();
   }
   
   /**
@@ -187,9 +216,16 @@ export class Player {
   }
   
   /**
+   * Get player ID
+   */
+  public getId(): string {
+    return this.id;
+  }
+  
+  /**
    * Update player based on movement controls
    * @param deltaTime Time since last update in seconds
-   * @param movement Movement input { forward, backward, left, right }
+   * @param movement Movement input { forward, backward, left, right, mouseX, mouseY }
    * @param walls Array of wall objects for collision detection
    * @returns Whether the position has changed enough to send to server
    */
@@ -364,5 +400,87 @@ export class Player {
       x: this.rotation.x,
       y: this.rotation.y
     };
+  }
+  
+  /**
+   * Add a flag to the player to show they're carrying it
+   */
+  public addFlagToPlayer(): void {
+    console.log(`Adding flag to player ${this.id}`);
+    
+    // If already has a flag, remove it first
+    if (this.flag) {
+      this.removeFlagFromPlayer();
+    }
+    
+    // Create flag pole
+    const poleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8);
+    const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+    pole.castShadow = true;
+    
+    // Create flag
+    const flagGeometry = new THREE.PlaneGeometry(0.6, 0.4);
+    const flagMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xFFD700, // Gold flag
+      side: THREE.DoubleSide 
+    });
+    const flagMesh = new THREE.Mesh(flagGeometry, flagMaterial);
+    flagMesh.position.set(0.3, 0.6, 0);
+    flagMesh.castShadow = true;
+    
+    // Create flag group
+    this.flag = new THREE.Group();
+    this.flag.add(pole);
+    this.flag.add(flagMesh);
+    
+    // Position the flag on the player's back
+    this.flag.position.set(0, this.playerHeight - 0.5, -0.3);
+    this.flag.rotation.set(0, 0, 0);
+    
+    // Add to player mesh
+    this.mesh.add(this.flag);
+    
+    console.log(`Flag added to player ${this.id}`);
+  }
+  
+  /**
+   * Remove the flag from the player
+   */
+  public removeFlagFromPlayer(): void {
+    console.log(`Removing flag from player ${this.id}`);
+    if (this.flag) {
+      this.mesh.remove(this.flag);
+      this.flag = null;
+      console.log(`Flag removed from player ${this.id}`);
+    }
+  }
+  
+  /**
+   * Check if the player is carrying the flag
+   */
+  public isCarryingFlag(): boolean {
+    console.log(`Checking if player ${this.id} is carrying flag: ${this.hasFlag}`);
+    return this.hasFlag;
+  }
+  
+  /**
+   * Set flag carrying status and update visual representation
+   * @param hasFlag Whether the player is carrying the flag
+   */
+  public setHasFlag(hasFlag: boolean): void {
+    console.log(`Setting flag status for player ${this.id} to ${hasFlag}`);
+    
+    if (this.hasFlag !== hasFlag) {
+      this.hasFlag = hasFlag;
+      
+      if (this.hasFlag) {
+        console.log(`Adding flag visual to player ${this.id}`);
+        this.addFlagToPlayer();
+      } else {
+        console.log(`Removing flag visual from player ${this.id}`);
+        this.removeFlagFromPlayer();
+      }
+    }
   }
 } 
