@@ -1,0 +1,1 @@
+{"version":3,"file":"GameServer.d.ts","sourceRoot":"","sources":["../../../src/server/game/GameServer.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAU,MAAM,WAAW,CAAC;AAM3C,qBAAa,UAAU;IACrB,OAAO,CAAC,EAAE,CAAS;IACnB,OAAO,CAAC,SAAS,CAAY;gBAMjB,EAAE,EAAE,MAAM;IAUf,UAAU,IAAI,IAAI;IA2DzB,OAAO,CAAC,cAAc;CAcvB"}

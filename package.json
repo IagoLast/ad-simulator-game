@@ -1,21 +1,31 @@
 {
-  "name": "paintball-game",
+  "name": "3d-multiplayer-ctf",
   "version": "1.0.0",
-  "description": "A 3D paintball game for the browser",
-  "main": "index.html",
+  "description": "Minimal 3D multiplayer game with Three.js and Node.js",
+  "main": "dist/server/index.js",
   "scripts": {
-    "start": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "check": "tsc --noEmit"
+    "build": "tsc && webpack",
+    "start": "node dist/server/index.js",
+    "dev": "concurrently \"tsc -w\" \"webpack --watch\" \"nodemon dist/server/index.js\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@types/node": "^22.13.9",
-    "three": "^0.157.0"
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "socket.io-client": "^4.7.2",
+    "three": "^0.158.0"
   },
   "devDependencies": {
-    "@types/three": "^0.157.0",
-    "typescript": "^5.8.2",
-    "vite": "^4.4.9"
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.9.0",
+    "@types/three": "^0.158.2",
+    "@types/yargs": "^17.0.33",
+    "concurrently": "^8.2.2",
+    "copy-webpack-plugin": "^11.0.0",
+    "nodemon": "^3.0.1",
+    "ts-loader": "^9.5.0",
+    "typescript": "^5.2.2",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
   }
 }
