@@ -1,6 +1,6 @@
 import { checkCapsuleBoxCollision } from '../physics';
 import { Player } from './Player';
-import { ObstacleManager } from './ObstacleManager';
+import { ObstacleManager } from '../map/ObstacleManager';
 
 export class CollisionSystem {
   private player: Player;

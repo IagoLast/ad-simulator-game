@@ -1,4 +1,4 @@
-import { AdStyle } from './Ad';
+import { AdStyle } from '../classes/ads/Ad';
 
 /**
  * Enhanced ad style with bright colors and more visible text

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Player } from './classes/Player';
-import { ObstacleManager } from './classes/ObstacleManager';
+import { ObstacleManager } from './map/ObstacleManager';
 import { CollisionSystem } from './classes/CollisionSystem';
 import { WeaponManager } from './classes/WeaponManager';
 import { BotManager } from './classes/BotManager';
@@ -299,8 +299,10 @@ function handleCollisions(): void {
 
 // @ts-ignore - Implemented but not currently used - part of the public API
 function spawnPlayer(): void {
+  // Use the refactored ObstacleManager's findSpawnPosition method
   const spawnPosition = obstacleManager.findSpawnPosition();
-  player.spawn(spawnPosition);
+  player.controls.getObject().position.copy(spawnPosition);
+  gameState.velocity.set(0, 0, 0);
 }
 
 // Spawn bots at suitable positions

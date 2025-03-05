@@ -6,7 +6,7 @@ import { RapidFirePaintball } from './weapons/RapidFirePaintball';
 import { Obstacle } from '../types';
 import { Player } from './Player';
 import { BaseProjectile } from './projectiles/BaseProjectile';
-import { ObstacleManager } from '../classes/ObstacleManager';
+import { ObstacleManager } from '../map/ObstacleManager';
 
 export class WeaponManager {
   private scene: THREE.Scene;
