@@ -13,7 +13,7 @@ console.log("Server starting up...");
 console.log("Environment:", process.env.NODE_ENV || "development");
 
 // Define game paths
-const gamePaths = [];
+const gamePaths: string[] = [];
 
 // Serve static files from the dist/public directory
 app.use(express.static(path.join(__dirname, "../public")));
@@ -31,6 +31,7 @@ app.get("/games", (req, res) => {
 });
 
 app.get("/:id", (req, res) => {
+  gamePaths.push(req.params.id);
   const namespace = io.of(`/${req.params.id}`);
   const gameServer = new GameServer(namespace);
   gameServer.initialize();
