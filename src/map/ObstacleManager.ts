@@ -10,7 +10,6 @@ import { Ad } from "../classes/ads/Ad";
  */
 export class ObstacleManager {
   private obstacles: Obstacle[] = [];
-  private scene: THREE.Scene;
   private worldSize: number = 100;
   private wallHeight: number = 100;
   
@@ -20,8 +19,6 @@ export class ObstacleManager {
   private adManager: AdManager;
 
   constructor(scene: THREE.Scene) {
-    this.scene = scene;
-    
     // Initialize component managers
     this.mazeGenerator = new MazeGenerator(scene, this.worldSize);
     this.boundaries = new Boundaries(scene, this.worldSize, this.wallHeight);

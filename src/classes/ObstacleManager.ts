@@ -53,12 +53,6 @@ export class ObstacleManager {
   }
 
   private createAds(count: number): void {
-    // If no wall positions are available, fall back to random placement
-    if (this.adPositions.length === 0) {
-      this.createRandomAds(count);
-      return;
-    }
-
     // Use a subset of available wall positions for ads
     const adCount = Math.min(count, Math.floor(this.adPositions.length * 0.4)); // Increased from 30% to 40%
 
