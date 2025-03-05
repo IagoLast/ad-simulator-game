@@ -339,17 +339,17 @@ function handleCollisions(): void {
 // Spawn bots at suitable positions
 function spawnBots(): void {
   const currentTime = performance.now();
-  
-  // Verificar si es momento de generar una nueva oleada de bots
+
   if (currentTime - lastBotSpawnTime > botSpawnInterval) {
     lastBotSpawnTime = currentTime;
-    nextWaveCountdown = botSpawnInterval / 1000; // Reiniciar el contador
+    nextWaveCountdown = botSpawnInterval / 1000;
     
-    // Encontrar posiciones adecuadas para los bots
     const spawnPositions = [];
     for (let i = 0; i < botsPerWave; i++) {
-      const spawnPosition = obstacleManager.findSpawnPosition();
-      spawnPositions.push(spawnPosition);
+      const spawnPosition = obstacleManager.findBotSpawnPosition();
+      if(spawnPosition) {
+        spawnPositions.push(spawnPosition);
+      }
     }
     
     // Generar los bots

@@ -148,6 +148,45 @@ export class ObstacleManager {
     return position;
   }
 
+  public findBotSpawnPosition(): THREE.Vector3 | null {
+    // Get all obstacle positions
+    const obstaclePositions = this.obstacles.map(obstacle => obstacle.collider.position);
+    
+    // Find a position that is at least 5 units away from all obstacles
+    const maxAttempts = 100;
+    let attempts = 0;
+    
+    while (attempts < maxAttempts) {
+      // Generate random coordinates within the world limits
+      const x = (Math.random() * 2 - 1) * (this.worldSize * 0.7);
+      const z = (Math.random() * 2 - 1) * (this.worldSize * 0.7);
+      
+      // Create a test position
+      const testPosition = new THREE.Vector3(x, 1, z);
+      
+      // Check if it's far enough from all obstacles
+      let tooCloseToObstacle = false;
+      const minDistance = 5; // Minimum distance from any obstacle
+      
+      for (const obstaclePosition of obstaclePositions) {
+        const distance = testPosition.distanceTo(obstaclePosition);
+        const obstacleRadius = 5; // Assuming all obstacles are spheres with radius 5
+        
+        if (distance < minDistance + obstacleRadius) {
+          tooCloseToObstacle = true;
+          break;
+        }
+      }
+      
+      if (!tooCloseToObstacle) {
+        return testPosition;
+      }
+      
+      attempts++;
+    }
+    return null;
+  }   
+
   /**
    * Get the position of the maze exit
    * @returns The position of the exit, or null if no exit exists
