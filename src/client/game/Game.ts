@@ -4,6 +4,7 @@ import { EntityType, GameState, MapData, PlayerMovement, PlayerState, SocketEven
 import { Controls } from './Controls';
 import { Player } from './Player';
 import { MapRenderer } from './core/MapRenderer';
+import { Sound } from './core/Sound';
 
 /**
  * Game class for a first-person multiplayer 3D game
@@ -25,6 +26,7 @@ export class Game {
   private flagCarrier: string | null = null;
   private gameOver: boolean = false;
   private winningTeam: number | null = null;
+  private sound: Sound;
 
   /**
    * Create a new game instance
@@ -91,6 +93,16 @@ export class Game {
           playerId: detail.playerId,
           position: detail.position
         });
+      }
+    });
+    
+    this.sound = Sound.getInstance();
+    
+    // Add event listener for toggling sound with 'M' key
+    window.addEventListener('keydown', (event) => {
+      if (event.key.toLowerCase() === 'm') {
+        const soundEnabled = this.sound.toggleSound();
+        this.showGameMessage(`Sound ${soundEnabled ? 'enabled' : 'disabled'}`, soundEnabled ? '#00ff00' : '#ff0000', 1500);
       }
     });
   }
@@ -221,6 +233,12 @@ export class Game {
         this.gameMessageElement.style.opacity = '0';
       }
     }, duration);
+    
+    // Play win/lose sound when game ends
+    if (message.includes('win') || message.includes('Win')) {
+      const isWin = message.includes('You win') || message.includes('Your team wins');
+      this.sound.playGameOverSound(isWin);
+    }
   }
 
   /**
@@ -336,6 +354,9 @@ export class Game {
       
       // Update team info to reflect new player count
       this.updateTeamInfo();
+      
+      // Play player join sound
+      this.sound.play('player_join');
     });
     
     // Handle player leave events
@@ -344,15 +365,18 @@ export class Game {
       
       // Remove player from the scene
       if (this.players.has(playerId)) {
-      const player = this.players.get(playerId);
-      if (player) {
-        this.scene.remove(player.mesh);
+        const player = this.players.get(playerId);
+        if (player) {
+          this.scene.remove(player.mesh);
         }
         this.players.delete(playerId);
       }
       
       // Update team info to reflect new player count
       this.updateTeamInfo();
+      
+      // Play player leave sound
+      this.sound.play('player_leave');
     });
     
     // Handle player movement updates from other players
@@ -694,8 +718,7 @@ export class Game {
     
     // Update controls and get input state
     this.controls.update(deltaTime);
-      const movement = this.controls.getMovement();
-      
+    
     // Update local player if exists
     if (this.localPlayer && !this.gameOver) {
       // Ensure flag visibility is correct
@@ -740,7 +763,7 @@ export class Game {
       }
       
       // Update player position based on input
-      const positionChanged = this.localPlayer.update(deltaTime, movement, this.walls);
+      const positionChanged = this.localPlayer.update(deltaTime, this.controls.getMovement(), this.walls);
       
       // If position changed significantly, send update to server
       if (positionChanged) {
@@ -753,6 +776,13 @@ export class Game {
           rotation
       });
       }
+    }
+    
+    // Check if player is moving to play footstep sounds
+    if (this.localPlayer && !this.gameOver) {
+      const movement = this.controls.getMovement();
+      const isMoving = movement.forward || movement.backward || movement.left || movement.right;
+      this.sound.playFootsteps(isMoving);
     }
     
     // Render the scene
@@ -787,6 +817,9 @@ export class Game {
         playerId: this.socket.id,
         teamId: this.localPlayer.getTeamId()
       });
+      
+      // When flag is picked up
+      this.sound.playFlagSound('pickup');
     }
   }
   
@@ -889,6 +922,11 @@ export class Game {
       new THREE.Vector3(shotData.direction.x, shotData.direction.y, shotData.direction.z),
       this.localPlayer.getTeamId()
     );
+    
+    // Add sound effect for shooting
+    if (this.localPlayer) {
+      this.sound.play('shoot');
+    }
   }
   
   /**
@@ -973,6 +1011,14 @@ export class Game {
       }
       
       // Check player collisions (only visual - server handles actual hits)
+      
+      // When impact is detected, play impact sound
+      if (intersects.length > 0 && intersects[0].distance < 0.2) {
+        this.sound.playImpactSound(
+          { x: projectile.position.x, y: projectile.position.y, z: projectile.position.z },
+          { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }
+        );
+      }
       
       // Continue animation
       requestAnimationFrame(animateProjectile);
