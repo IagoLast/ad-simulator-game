@@ -256,20 +256,10 @@ export class Player {
     
     // Check if flag status has changed
     const newHasFlag = playerState.hasFlag || false;
-    console.log(`Player ${this.id} flag status update - old: ${this.hasFlag}, new: ${newHasFlag}`);
+    console.log(`[FLAG DEBUG] Player ${this.id} flag status update - old: ${this.hasFlag}, new: ${newHasFlag} (isLocalPlayer: ${this.isLocalPlayer})`);
     
-    // Always synchronize hasFlag visual state, even if the property hasn't changed
-    // This ensures consistency in case the visual doesn't match the state
-    this.hasFlag = newHasFlag;
-    
-    // Synchronize flag visualization with flag state
-    if (this.hasFlag && !this.flag) {
-      console.log(`Player ${this.id} should have flag but doesn't - adding visual`);
-      this.addFlagToPlayer();
-    } else if (!this.hasFlag && this.flag) {
-      console.log(`Player ${this.id} shouldn't have flag but does - removing visual`);
-      this.removeFlagFromPlayer();
-    }
+    // Always update flag status to ensure visual state matches server state
+    this.setHasFlag(newHasFlag);
     
     // Update health and death status
     this.health = playerState.health;
@@ -678,18 +668,30 @@ export class Player {
   public setHasFlag(hasFlag: boolean): void {
     console.log(`[FLAG DEBUG] Setting flag status for player ${this.id} to ${hasFlag} (local: ${this.isLocalPlayer})`);
     
-    if (this.hasFlag !== hasFlag) {
-      this.hasFlag = hasFlag;
+    // Update flag state
+    this.hasFlag = hasFlag;
+    
+    // Change player color based on flag status
+    if (this.hasFlag) {
+      console.log(`[FLAG DEBUG] Player ${this.id} now has flag, changing to yellow`);
+      // Change body to bright yellow color with emission
+      (this.playerBody.material as THREE.MeshStandardMaterial).color.set(0xFFFF00); // Bright yellow
+      (this.playerBody.material as THREE.MeshStandardMaterial).emissive.set(0xFFAA00); // Orange-yellow emission
+      (this.playerBody.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.7;
       
-      if (this.hasFlag) {
-        console.log(`[FLAG DEBUG] Player ${this.id} now has flag, adding visual representation`);
-        this.addFlagToPlayer();
-      } else {
-        console.log(`[FLAG DEBUG] Player ${this.id} no longer has flag, removing visual representation`);
-        this.removeFlagFromPlayer();
-      }
+      // Make player fully opaque even if local player
+      (this.playerBody.material as THREE.MeshStandardMaterial).opacity = 1.0;
     } else {
-      console.log(`[FLAG DEBUG] Player ${this.id} already has hasFlag=${hasFlag}, no change needed`);
+      console.log(`[FLAG DEBUG] Player ${this.id} no longer has flag, resetting color`);
+      // Reset to original color
+      (this.playerBody.material as THREE.MeshStandardMaterial).color.set(0xdddddd); // Light gray
+      (this.playerBody.material as THREE.MeshStandardMaterial).emissive.set(0x000000); // No emission
+      (this.playerBody.material as THREE.MeshStandardMaterial).emissiveIntensity = 0;
+      
+      // Reset opacity for local player
+      if (this.isLocalPlayer) {
+        (this.playerBody.material as THREE.MeshStandardMaterial).opacity = 0.3;
+      }
     }
   }
   

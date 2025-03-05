@@ -398,7 +398,7 @@ export class Game {
         this.localPlayer.setHasFlag(false);
       }
       
-      for (const [id, player] of this.players.entries()) {
+      for (const [_d, player] of this.players.entries()) {
         player.setHasFlag(false);
       }
       
