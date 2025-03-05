@@ -59,10 +59,13 @@ export class Game {
     // Initialize map renderer
     this.mapRenderer = new MapRenderer(this.scene);
     
-    // Initialize socket connection using the current path as namespace
-    this.socket = io(window.location.hostname, {
-      path: namespace,
-      transports: ['websocket'],
+    // Initialize socket connection with proper Socket.IO configuration for Docker
+    this.socket = io(namespace, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000
     });
     
     // Initialize players collection

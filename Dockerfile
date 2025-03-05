@@ -34,5 +34,9 @@ EXPOSE 8080
 ENV PORT=8080
 ENV NODE_ENV=production
 
+# Configure for WebSockets
+ENV SOCKET_PROTOCOL=ws
+ENV SOCKET_TRANSPORTS=websocket,polling
+
 # Command to run the application
 CMD ["node", "dist/server/index.js"] 

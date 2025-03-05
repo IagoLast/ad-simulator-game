@@ -118,6 +118,34 @@
                 .then(response => response.json())
                 .then(data => {
                     const gameList = document.getElementById('game-list');
+                    
+                    // If no games available, show a create game option
+                    if (data.games.length === 0) {
+                        const createGameLi = document.createElement('li');
+                        const createGameInput = document.createElement('input');
+                        createGameInput.type = 'text';
+                        createGameInput.placeholder = 'Enter new game name';
+                        createGameInput.style.padding = '10px';
+                        createGameInput.style.marginBottom = '10px';
+                        createGameInput.style.width = '100%';
+                        
+                        const createGameButton = document.createElement('a');
+                        createGameButton.href = '#';
+                        createGameButton.textContent = 'Create New Game';
+                        createGameButton.onclick = function(e) {
+                            e.preventDefault();
+                            const gameName = createGameInput.value.trim();
+                            if (gameName) {
+                                window.location.href = `/${gameName}`;
+                            }
+                        };
+                        
+                        createGameLi.appendChild(createGameInput);
+                        createGameLi.appendChild(createGameButton);
+                        gameList.appendChild(createGameLi);
+                    }
+                    
+                    // Add existing games
                     data.games.forEach(game => {
                         const li = document.createElement('li');
                         const a = document.createElement('a');
