@@ -147,4 +147,12 @@ export class ObstacleManager {
     
     return position;
   }
+
+  /**
+   * Get the position of the maze exit
+   * @returns The position of the exit, or null if no exit exists
+   */
+  public getExitPosition(): THREE.Vector3 | null {
+    return this.exitPosition;
+  }
 } 

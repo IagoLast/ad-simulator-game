@@ -5,6 +5,7 @@ import { WeaponManager } from './classes/WeaponManager';
 import { BotManager } from './classes/BotManager';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { GameState } from './types';
+import { Flag } from './classes/Flag';
 
 // Game state
 const gameState: GameState = {
@@ -35,6 +36,10 @@ let player: Player;
 let obstacleManager: ObstacleManager;
 let weaponManager: WeaponManager;
 let botManager: BotManager;
+let flag: Flag;
+
+// Flag captured notification element
+let flagNotification: HTMLElement | null;
 
 // Bot spawning variables
 let lastBotSpawnTime = 0;
@@ -89,6 +94,21 @@ function setupEventListeners(): void {
   const waveCountdown = document.getElementById('wave-countdown');
   const weaponSelector = document.getElementById('weapon-selector');
   
+  // Create flag notification element
+  flagNotification = document.createElement('div');
+  flagNotification.id = 'flag-notification';
+  flagNotification.style.position = 'absolute';
+  flagNotification.style.bottom = '10px';
+  flagNotification.style.left = '50%';
+  flagNotification.style.transform = 'translateX(-50%)';
+  flagNotification.style.background = 'rgba(0,0,0,0.5)';
+  flagNotification.style.color = 'white';
+  flagNotification.style.padding = '10px 20px';
+  flagNotification.style.borderRadius = '5px';
+  flagNotification.style.fontFamily = 'Arial, sans-serif';
+  flagNotification.style.display = 'none';
+  document.body.appendChild(flagNotification);
+  
   if (!instructions || !crosshair) return;
 
   instructions.addEventListener('click', () => {
@@ -98,12 +118,8 @@ function setupEventListeners(): void {
   controls.addEventListener('lock', () => {
     instructions.style.display = 'none';
     crosshair.style.display = 'block';
-    if (waveCountdown) {
-      waveCountdown.style.display = 'block';
-    }
-    if (weaponSelector) {
-      weaponSelector.style.display = 'flex';
-    }
+    if (waveCountdown) waveCountdown.style.display = 'block';
+    if (weaponSelector) weaponSelector.style.display = 'flex';
   });
 
   controls.addEventListener('unlock', () => {
@@ -386,6 +402,9 @@ function animate(): void {
     weaponManager.update(delta);
   }
   
+  // Handle flag interaction
+  handleFlagInteraction();
+  
   renderer.render(scene, camera);
   gameState.prevTime = time;
 }
@@ -469,8 +488,173 @@ function init(): void {
   // Update health display
   player.updateHealthDisplay();
   
+  // Create flag after obstacles are created
+  createFlag();
+  
   // Start animation loop
   animate();
+}
+
+// Create the flag at a random position in the maze
+function createFlag(): void {
+  // Place the flag at a random position away from the spawn point
+  const flagSpawnPosition = findFlagSpawnPosition();
+  flag = new Flag(scene, flagSpawnPosition);
+  
+  console.log("Flag created at position:", flagSpawnPosition);
+}
+
+// Find a suitable position for the flag (away from spawn)
+function findFlagSpawnPosition(): THREE.Vector3 {
+  // Try to use a position from obstacleManger if available
+  if (obstacleManager && obstacleManager.findSpawnPosition) {
+    // Get spawn position for player
+    const playerSpawnPos = obstacleManager.findSpawnPosition();
+    
+    // Find a position that's at least 30 units away from player spawn
+    const attempts = 20;
+    for (let i = 0; i < attempts; i++) {
+      const testPos = obstacleManager.findSpawnPosition();
+      
+      // If this position is far enough from player spawn, use it
+      if (testPos.distanceTo(playerSpawnPos) > 30) {
+        // Raise it a bit off the ground
+        testPos.y = 2; 
+        return testPos;
+      }
+    }
+  }
+  
+  // Fallback to a hardcoded position if we couldn't find a good one
+  const position = new THREE.Vector3(
+    (Math.random() - 0.5) * 80, 
+    2, 
+    (Math.random() - 0.5) * 80
+  );
+  
+  return position;
+}
+
+// Handle flag interaction and win condition
+function handleFlagInteraction(): void {
+  if (!flag || !player || !obstacleManager) return;
+  
+  const playerPosition = player.controls.getObject().position;
+  
+  // Check if player can capture the flag
+  if (!flag.isCaptured && flag.canCapture(playerPosition)) {
+    flag.capture();
+    showFlagNotification("Flag captured! Get to the exit!");
+  }
+  
+  // Update flag position when captured
+  if (flag.isCaptured) {
+    flag.updatePosition(playerPosition);
+    
+    // Check if player has reached the exit with the flag
+    const exitPosition = obstacleManager.getExitPosition();
+    if (exitPosition && flag.isAtExit(playerPosition, exitPosition)) {
+      // Player wins!
+      showWinScreen();
+    }
+  }
+}
+
+// Show flag notification
+function showFlagNotification(message: string): void {
+  if (!flagNotification) return;
+  
+  flagNotification.textContent = message;
+  flagNotification.style.display = 'block';
+  
+  // Hide after 5 seconds
+  setTimeout(() => {
+    if (flagNotification) {
+      flagNotification.style.display = 'none';
+    }
+  }, 5000);
+}
+
+// Show win screen
+function showWinScreen(): void {
+  // Create a win notification
+  const winScreen = document.createElement('div');
+  winScreen.style.position = 'absolute';
+  winScreen.style.top = '0';
+  winScreen.style.left = '0';
+  winScreen.style.width = '100%';
+  winScreen.style.height = '100%';
+  winScreen.style.background = 'rgba(0,0,0,0.8)';
+  winScreen.style.display = 'flex';
+  winScreen.style.flexDirection = 'column';
+  winScreen.style.justifyContent = 'center';
+  winScreen.style.alignItems = 'center';
+  winScreen.style.color = 'white';
+  winScreen.style.fontFamily = 'Arial, sans-serif';
+  winScreen.style.zIndex = '1000';
+  
+  const title = document.createElement('h1');
+  title.textContent = 'VICTORY!';
+  title.style.fontSize = '5rem';
+  title.style.marginBottom = '20px';
+  title.style.color = '#FFD700'; // Gold color
+  
+  const message = document.createElement('p');
+  message.textContent = 'You successfully captured the flag and reached the exit!';
+  message.style.fontSize = '1.5rem';
+  message.style.marginBottom = '40px';
+  
+  const restartButton = document.createElement('button');
+  restartButton.textContent = 'Play Again';
+  restartButton.style.padding = '15px 30px';
+  restartButton.style.fontSize = '1.2rem';
+  restartButton.style.background = '#4CAF50';
+  restartButton.style.border = 'none';
+  restartButton.style.borderRadius = '5px';
+  restartButton.style.cursor = 'pointer';
+  
+  restartButton.addEventListener('click', () => {
+    document.body.removeChild(winScreen);
+    restartGame();
+  });
+  
+  winScreen.appendChild(title);
+  winScreen.appendChild(message);
+  winScreen.appendChild(restartButton);
+  
+  document.body.appendChild(winScreen);
+  
+  // Unlock controls when showing win screen
+  controls.unlock();
+}
+
+// Restart the game
+function restartGame(): void {
+  // Remove existing flag
+  if (flag && flag.mesh) {
+    scene.remove(flag.mesh);
+  }
+  
+  // Reset bot manager
+  if (botManager) {
+    botManager.clearBots();
+  }
+  
+  // Create new obstacles
+  obstacleManager.createObstacles();
+  
+  // Create new flag
+  createFlag();
+  
+  // Reset player position and health
+  const spawnPosition = obstacleManager.findSpawnPosition();
+  player.spawn(spawnPosition);
+  player.health = 100;
+  player.updateHealthDisplay();
+  
+  // Reset game state
+  gameState.health = 100;
+  gameState.velocity.set(0, 0, 0);
 }
 
 // Start the game

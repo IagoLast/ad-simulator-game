@@ -2,11 +2,15 @@ import * as THREE from 'three';
 import { Bot } from './Bot';
 import { Obstacle } from '../types';
 import { BaseProjectile } from './projectiles/BaseProjectile';
+import { WeaponManager } from './WeaponManager';
 
 export class BotManager {
   public bots: Bot[] = [];
   private scene: THREE.Scene;
   private maxBots: number = 10;
+  private obstacles: Obstacle[] = [];
+  private weaponManager: WeaponManager | null = null;
+  private playerRef: THREE.Object3D | null = null;
   
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -228,5 +232,20 @@ export class BotManager {
     bot.useBounceBallProjectiles(bounces);
     console.log(`Bot rebotante creado en (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
     return bot;
+  }
+
+  /**
+   * Clears all bots from the scene
+   */
+  public clearBots(): void {
+    // Remove each bot from the scene
+    this.bots.forEach(bot => {
+      if (bot.mesh) {
+        this.scene.remove(bot.mesh);
+      }
+    });
+    
+    // Clear the bots array
+    this.bots = [];
   }
 } 
