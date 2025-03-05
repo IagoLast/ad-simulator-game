@@ -258,16 +258,17 @@ export class Player {
     const newHasFlag = playerState.hasFlag || false;
     console.log(`Player ${this.id} flag status update - old: ${this.hasFlag}, new: ${newHasFlag}`);
     
-    if (newHasFlag !== this.hasFlag) {
-      this.hasFlag = newHasFlag;
-      
-      if (this.hasFlag) {
-        console.log(`Player ${this.id} now has the flag, adding visual representation`);
-        this.addFlagToPlayer();
-      } else {
-        console.log(`Player ${this.id} no longer has the flag, removing visual representation`);
-        this.removeFlagFromPlayer();
-      }
+    // Always synchronize hasFlag visual state, even if the property hasn't changed
+    // This ensures consistency in case the visual doesn't match the state
+    this.hasFlag = newHasFlag;
+    
+    // Synchronize flag visualization with flag state
+    if (this.hasFlag && !this.flag) {
+      console.log(`Player ${this.id} should have flag but doesn't - adding visual`);
+      this.addFlagToPlayer();
+    } else if (!this.hasFlag && this.flag) {
+      console.log(`Player ${this.id} shouldn't have flag but does - removing visual`);
+      this.removeFlagFromPlayer();
     }
     
     // Update health and death status
@@ -573,10 +574,11 @@ export class Player {
    * Add a flag to the player to show they're carrying it
    */
   public addFlagToPlayer(): void {
-    console.log(`Adding flag to player ${this.id}`);
+    console.log(`[FLAG DEBUG] Adding flag to player ${this.id} (local: ${this.isLocalPlayer})`);
     
     // If already has a flag, remove it first
     if (this.flag) {
+      console.log(`[FLAG DEBUG] Player ${this.id} already has flag, removing it first`);
       this.removeFlagFromPlayer();
     }
     
@@ -587,10 +589,12 @@ export class Player {
     pole.castShadow = true;
     
     // Create flag
-    const flagGeometry = new THREE.PlaneGeometry(0.6, 0.4);
+    const flagGeometry = new THREE.PlaneGeometry(0.8, 0.6);
     const flagMaterial = new THREE.MeshStandardMaterial({ 
       color: 0xFFD700, // Gold flag
-      side: THREE.DoubleSide 
+      side: THREE.DoubleSide,
+      emissive: 0xFFA500, // Orange emissive color to make it glow
+      emissiveIntensity: 0.5 // Strong glow
     });
     const flagMesh = new THREE.Mesh(flagGeometry, flagMaterial);
     flagMesh.position.set(0.3, 0.6, 0);
@@ -604,28 +608,54 @@ export class Player {
     // Add to player mesh
     this.mesh.add(this.flag);
     
-    // Position the flag on the player's back
-    this.flag.position.set(0, 0.5, 0.3); // Up and back
-    this.flag.rotation.set(0, 0, 0);
-    
-    // Scale down the flag when carried
-    this.flag.scale.set(0.5, 0.5, 0.5);
+    // Position and scale differently based on local vs remote player
+    if (this.isLocalPlayer) {
+      // For local player, make it less obtrusive
+      this.flag.position.set(0, 0.5, 0.3); // Up and back
+      this.flag.scale.set(0.4, 0.4, 0.4);
+    } else {
+      // For other players, make it very visible
+      this.flag.position.set(0, 1.5, 0); // Above the player's head
+      this.flag.scale.set(1.0, 1.0, 1.0); // Larger size
+    }
     
     // Set flag status
     this.hasFlag = true;
     
-    console.log(`Flag added to player ${this.id}`);
+    console.log(`[FLAG DEBUG] Flag added to player ${this.id} (flag object exists: ${this.flag !== null})`);
   }
   
   /**
    * Remove the flag from the player
    */
   public removeFlagFromPlayer(): void {
-    console.log(`Removing flag from player ${this.id}`);
-    if (this.flag) {
-      this.mesh.remove(this.flag);
+    console.log(`[FLAG DEBUG] Removing flag from player ${this.id} (local: ${this.isLocalPlayer})`);
+    
+    try {
+      if (this.flag) {
+        // Check if the flag is actually a child of the mesh
+        const flagIndex = this.mesh.children.indexOf(this.flag);
+        if (flagIndex !== -1) {
+          // Found the flag in the children, remove it
+          this.mesh.remove(this.flag);
+          console.log(`[FLAG DEBUG] Flag successfully removed from player ${this.id}`);
+        } else {
+          console.log(`[FLAG DEBUG] Flag reference exists but not found in mesh children for player ${this.id}`);
+        }
+        
+        // Clear flag reference regardless
+        this.flag = null;
+      } else {
+        console.log(`[FLAG DEBUG] No flag to remove from player ${this.id}`);
+      }
+      
+      // Always ensure hasFlag is set to false
+      this.hasFlag = false;
+    } catch (error) {
+      console.error(`[FLAG DEBUG] Error removing flag from player ${this.id}:`, error);
+      // Ensure flag state is reset even in case of error
       this.flag = null;
-      console.log(`Flag removed from player ${this.id}`);
+      this.hasFlag = false;
     }
   }
   
@@ -642,18 +672,20 @@ export class Player {
    * @param hasFlag Whether the player is carrying the flag
    */
   public setHasFlag(hasFlag: boolean): void {
-    console.log(`Setting flag status for player ${this.id} to ${hasFlag}`);
+    console.log(`[FLAG DEBUG] Setting flag status for player ${this.id} to ${hasFlag} (local: ${this.isLocalPlayer})`);
     
     if (this.hasFlag !== hasFlag) {
       this.hasFlag = hasFlag;
       
       if (this.hasFlag) {
-        console.log(`Adding flag visual to player ${this.id}`);
+        console.log(`[FLAG DEBUG] Player ${this.id} now has flag, adding visual representation`);
         this.addFlagToPlayer();
       } else {
-        console.log(`Removing flag visual from player ${this.id}`);
+        console.log(`[FLAG DEBUG] Player ${this.id} no longer has flag, removing visual representation`);
         this.removeFlagFromPlayer();
       }
+    } else {
+      console.log(`[FLAG DEBUG] Player ${this.id} already has hasFlag=${hasFlag}, no change needed`);
     }
   }
   

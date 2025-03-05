@@ -231,8 +231,48 @@ export class Game {
     this.socket.on(SocketEvents.GAME_STATE, (gameState: GameState) => {
       console.log('Received game state:', gameState);
       
+      // Store the previous flag carrier to detect changes
+      const previousFlagCarrier = this.flagCarrier;
+      
       // Update flag carrier from game state
       this.flagCarrier = gameState.flagCarrier || null;
+      console.log(`[FLAG DEBUG] Current client ID: ${this.socket.id}, flag carrier: ${this.flagCarrier}`);
+      
+      // Debug log for all players to check hasFlag status
+      gameState.players.forEach(player => {
+        console.log(`[FLAG DEBUG] Player ${player.id} hasFlag: ${player.hasFlag}`);
+      });
+      
+      // If flag carrier has changed, update player visuals
+      if (previousFlagCarrier !== this.flagCarrier) {
+        console.log(`[FLAG DEBUG] Flag carrier changed from ${previousFlagCarrier} to ${this.flagCarrier}`);
+        
+        // Remove flag from previous carrier if they still exist
+        if (previousFlagCarrier && this.players.has(previousFlagCarrier)) {
+          const prevPlayer = this.players.get(previousFlagCarrier);
+          if (prevPlayer) {
+            console.log(`[FLAG DEBUG] Removing flag from previous carrier ${previousFlagCarrier}`);
+            prevPlayer.setHasFlag(false);
+          }
+        } else if (previousFlagCarrier && this.localPlayer && previousFlagCarrier === this.socket.id) {
+          console.log(`[FLAG DEBUG] Removing flag from local player ${this.socket.id}`);
+          this.localPlayer.setHasFlag(false);
+        }
+        
+        // Add flag to new carrier
+        if (this.flagCarrier) {
+          if (this.flagCarrier === this.socket.id && this.localPlayer) {
+            console.log(`[FLAG DEBUG] Adding flag to local player ${this.socket.id}`);
+            this.localPlayer.setHasFlag(true);
+          } else if (this.players.has(this.flagCarrier)) {
+            const newCarrier = this.players.get(this.flagCarrier);
+            if (newCarrier) {
+              console.log(`[FLAG DEBUG] Adding flag to remote player ${this.flagCarrier}`);
+              newCarrier.setHasFlag(true);
+            }
+          }
+        }
+      }
       
       // Update game over state
       this.gameOver = gameState.gameOver || false;
@@ -343,7 +383,7 @@ export class Game {
     
     // Handle flag captured events
     this.socket.on(SocketEvents.FLAG_CAPTURED, (data: { playerId: string, teamId: number }) => {
-      console.log('Flag captured:', data);
+      console.log('[FLAG DEBUG] Flag captured:', data);
       
       // Update flag carrier status
       this.flagCarrier = data.playerId;
@@ -358,7 +398,7 @@ export class Game {
         
         // Update local player flag status directly
         if (this.localPlayer) {
-          console.log('Setting local player hasFlag to true');
+          console.log('[FLAG DEBUG] Setting local player hasFlag to true');
           this.localPlayer.setHasFlag(true);
         }
       } else {
@@ -367,7 +407,10 @@ export class Game {
         // Update other player flag status
         const player = this.players.get(data.playerId);
         if (player) {
+          console.log('[FLAG DEBUG] Setting remote player hasFlag to true for player', data.playerId);
           player.setHasFlag(true);
+        } else {
+          console.log('[FLAG DEBUG] ERROR: Could not find remote player with ID', data.playerId);
         }
       }
       
@@ -462,18 +505,39 @@ export class Game {
     
     // Handle player death events
     this.socket.on(SocketEvents.PLAYER_DIED, (data: { playerId: string, killerId: string }) => {
-      console.log('Player died:', data);
+      console.log('[FLAG DEBUG] Player died:', data);
+      
+      // Check if the dead player was carrying the flag
+      const wasCarryingFlag = this.flagCarrier === data.playerId;
       
       // If it's the local player
       if (data.playerId === this.socket.id && this.localPlayer) {
+        // Clear flag status if they were the flag carrier
+        if (wasCarryingFlag) {
+          console.log('[FLAG DEBUG] Local player died while carrying flag, clearing status');
+          this.localPlayer.setHasFlag(false);
+        }
+        
         // Show death message
         this.showGameMessage('You were eliminated! Respawning in 5 seconds...', '#FF0000', 5000);
       } else {
         // Update other player's state
         const player = this.players.get(data.playerId);
         if (player) {
+          // Clear flag status if they were the flag carrier
+          if (wasCarryingFlag) {
+            console.log('[FLAG DEBUG] Remote player died while carrying flag, clearing status');
+            player.setHasFlag(false);
+          }
+          
           player.takeDamage(999); // Force death state
         }
+      }
+      
+      // If the dead player was the flag carrier, update the UI
+      if (wasCarryingFlag) {
+        this.flagCarrier = null;
+        this.updateTeamInfo();
       }
     });
     
@@ -481,8 +545,14 @@ export class Game {
     this.socket.on(SocketEvents.PLAYER_RESPAWNED, (data: { playerId: string, position: { x: number, y: number, z: number } }) => {
       console.log('Player respawned:', data);
       
+      // If it's the local player
+      if (data.playerId === this.socket.id && this.localPlayer) {
+        console.log('Local player respawned');
+        this.localPlayer.respawn(data.position);
+        this.showGameMessage('You have respawned!', '#00FF00', 3000);
+      }
       // If it's another player
-      if (data.playerId !== this.socket.id) {
+      else if (data.playerId !== this.socket.id) {
         const player = this.players.get(data.playerId);
         if (player) {
           player.respawn(data.position);
@@ -493,9 +563,9 @@ export class Game {
     // Handle flag dropped events
     this.socket.on(SocketEvents.FLAG_DROPPED, (data: { 
       position: { x: number, y: number, z: number },
-      playerId: string 
+      playerId: string
     }) => {
-      console.log('Flag dropped:', data);
+      console.log('[FLAG DEBUG] Flag dropped:', data);
       
       // If the flag carrier was the local player, remove flag
       if (data.playerId === this.socket.id && this.localPlayer) {
@@ -516,6 +586,12 @@ export class Game {
       
       // Show message
       this.showGameMessage('Flag has been dropped!', 'yellow', 3000);
+      
+      // Wait for the flag to be added to the map by the server
+      setTimeout(() => {
+        // Request updated map data to ensure flag is visible
+        this.socket.emit('request_map_data');
+      }, 500);
     });
     
     // Join the game when connected
@@ -532,7 +608,14 @@ export class Game {
    */
   private createPlayer(playerState: PlayerState): Player {
     const isLocalPlayer = playerState.id === this.socket.id;
+    console.log(`[FLAG DEBUG] Creating player ${playerState.id}, hasFlag: ${playerState.hasFlag}, isLocalPlayer: ${isLocalPlayer}`);
+    
     const player = new Player(playerState, isLocalPlayer);
+    
+    // Ensure flag status is correctly set
+    if (playerState.hasFlag) {
+      console.log(`[FLAG DEBUG] New player ${playerState.id} has flag status true`);
+    }
     
     // Add player mesh to scene
     this.scene.add(player.mesh);
@@ -587,6 +670,7 @@ export class Game {
    * Animation loop
    */
   private animate(time: number = 0): void {
+    // Request next frame
     requestAnimationFrame(this.animate.bind(this));
     
     // Calculate delta time (in seconds)
@@ -604,6 +688,23 @@ export class Game {
     
     // Update local player if exists
     if (this.localPlayer && !this.gameOver) {
+      // Ensure flag visibility is correct
+      if (this.flagCarrier) {
+        // Check if the flag carrier has the flag visible
+        if (this.flagCarrier === this.socket.id && this.localPlayer) {
+          if (!this.localPlayer.isCarryingFlag()) {
+            console.log(`[FLAG DEBUG] Local player should have flag but doesn't - fixing`);
+            this.localPlayer.setHasFlag(true);
+          }
+        } else if (this.players.has(this.flagCarrier)) {
+          const carrier = this.players.get(this.flagCarrier);
+          if (carrier && !carrier.isCarryingFlag()) {
+            console.log(`[FLAG DEBUG] Remote player ${this.flagCarrier} should have flag but doesn't - fixing`);
+            carrier.setHasFlag(true);
+          }
+        }
+      }
+      
       // Check for flag collision
       this.checkFlagCollision();
       

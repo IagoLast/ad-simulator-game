@@ -90,6 +90,8 @@ export class GameServer {
   private lastProjectileId: number = 0;
   private respawnTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private lastUpdate: number = Date.now();
+  private flagDropTime: number | null = null;
+  private flagCooldownPeriod: number = 3000; // 3 seconds cooldown
   
   /**
    * Create a new GameServer instance
@@ -442,9 +444,14 @@ export class GameServer {
       
       // Handle flag capture
       socket.on(SocketEvents.FLAG_CAPTURED, (data: { playerId: string, teamId: number }) => {
-        if (this.gameOver || this.flagCarrier) return; // Ignore if game is over or flag already captured
+        // Ignore if game is over or flag already captured
+        if (this.gameOver || this.flagCarrier) return; 
         
+        // Flag can always be picked up - no cooldown
         console.log(`Player ${data.playerId} of team ${data.teamId} captured the flag`);
+        
+        // Reset flag drop time
+        this.flagDropTime = null;
         
         // Update flag carrier
         this.flagCarrier = data.playerId;
@@ -570,6 +577,12 @@ export class GameServer {
           // Notify other players about the disconnection
           this.io.emit(SocketEvents.PLAYER_LEFT, socket.id);
         }
+      });
+      
+      // Add handler for request_map_data event
+      socket.on('request_map_data', () => {
+        console.log(`Player ${socket.id} requested map data refresh`);
+        socket.emit(SocketEvents.MAP_DATA, this.mapData);
       });
     });
   }
@@ -708,6 +721,9 @@ export class GameServer {
     // Update flag carrier status
     this.flagCarrier = null;
     player.hasFlag = false;
+    
+    // Set flag drop time for cooldown
+    this.flagDropTime = Date.now();
     
     // Update entities to add flag back to map at player's position
     let flagExists = false;
