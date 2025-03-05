@@ -260,9 +260,6 @@ export class Player {
 
     // Check if flag status has changed
     const newHasFlag = playerState.hasFlag || false;
-    console.log(
-      `[FLAG DEBUG] Player ${this.id} flag status update - old: ${this.hasFlag}, new: ${newHasFlag} (isLocalPlayer: ${this.isLocalPlayer})`
-    );
 
     // Always update flag status to ensure visual state matches server state
     this.setHasFlag(newHasFlag);
@@ -587,9 +584,6 @@ export class Player {
    * Check if the player is carrying the flag
    */
   public isCarryingFlag(): boolean {
-    console.log(
-      `Checking if player ${this.id} is carrying flag: ${this.hasFlag}`
-    );
     return this.hasFlag;
   }
 
@@ -598,18 +592,11 @@ export class Player {
    * @param hasFlag Whether the player is carrying the flag
    */
   public setHasFlag(hasFlag: boolean): void {
-    console.log(
-      `[FLAG DEBUG] Setting flag status for player ${this.id} to ${hasFlag} (local: ${this.isLocalPlayer})`
-    );
-
     // Update flag state
     this.hasFlag = hasFlag;
 
     // Change player color based on flag status
     if (this.hasFlag) {
-      console.log(
-        `[FLAG DEBUG] Player ${this.id} now has flag, changing to yellow`
-      );
       // Change body to bright yellow color with emission
       (this.playerBody.material as THREE.MeshStandardMaterial).color.set(
         0xffff00
@@ -624,9 +611,6 @@ export class Player {
       // Make player fully opaque even if local player
       (this.playerBody.material as THREE.MeshStandardMaterial).opacity = 1.0;
     } else {
-      console.log(
-        `[FLAG DEBUG] Player ${this.id} no longer has flag, resetting color`
-      );
       // Reset to original color
       (this.playerBody.material as THREE.MeshStandardMaterial).color.set(
         0xdddddd
@@ -663,10 +647,6 @@ export class Player {
 
     // Reduce health
     this.health = Math.max(0, this.health - damage);
-
-    console.log(
-      `Player ${this.id} took ${damage} damage, health now: ${this.health}`
-    );
 
     // Check if player died
     if (this.health <= 0 && !this.isDead) {
@@ -803,8 +783,6 @@ export class Player {
    * Handle player death
    */
   private die(): void {
-    console.log(`Player ${this.id} died!`);
-
     // Set dead state
     this.isDead = true;
 
@@ -821,8 +799,6 @@ export class Player {
    * Drop the flag at the current position
    */
   private dropFlag(): void {
-    console.log(`Player ${this.id} dropped the flag`);
-
     // Only handle on server side, but notify server we dropped it
     if (this.isLocalPlayer) {
       // Emit event to server
