@@ -22,6 +22,32 @@
             background-color: rgba(0, 0, 0, 0.5);
             padding: 10px;
             border-radius: 5px;
+            width: 200px;
+        }
+        #health-bar-container {
+            width: 100%;
+            height: 15px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        #health-bar {
+            width: 100%;
+            height: 100%;
+            background-color: #2ecc71;
+            border-radius: 5px;
+            transition: width 0.3s ease-in-out;
+        }
+        /* Health bar color changes based on health level */
+        .health-high {
+            background-color: #2ecc71; /* Green */
+        }
+        .health-medium {
+            background-color: #f39c12; /* Orange */
+        }
+        .health-low {
+            background-color: #e74c3c; /* Red */
         }
         #instructions {
             position: absolute;
@@ -229,7 +255,12 @@
     </style>
 </head>
 <body>
-    <div id="health">Health: 100%</div>
+    <div id="health">
+        Health: 100%
+        <div id="health-bar-container">
+            <div id="health-bar" class="health-high"></div>
+        </div>
+    </div>
     <div id="wave-countdown">Next wave: 15s</div>
     <div id="crosshair"></div>
     <div id="instructions">

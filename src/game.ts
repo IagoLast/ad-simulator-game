@@ -390,8 +390,33 @@ function showWaveNotification(): void {
 // @ts-ignore - Implemented but not currently used - part of the public API
 function updateHealth(): void {
   const healthDisplay = document.getElementById('health');
+  const healthBar = document.getElementById('health-bar');
+  
   if (healthDisplay) {
-    healthDisplay.textContent = `Health: ${gameState.health}%`;
+    // Update text display
+    const healthText = healthDisplay.childNodes[0];
+    if (healthText) {
+      healthText.textContent = `Health: ${gameState.health}%`;
+    } else {
+      // Fallback if the structure is different
+      healthDisplay.textContent = `Health: ${gameState.health}%`;
+    }
+    
+    // Update health bar width
+    if (healthBar) {
+      healthBar.style.width = `${gameState.health}%`;
+      
+      // Update health bar color based on health level
+      healthBar.classList.remove('health-high', 'health-medium', 'health-low');
+      
+      if (gameState.health > 60) {
+        healthBar.classList.add('health-high');
+      } else if (gameState.health > 30) {
+        healthBar.classList.add('health-medium');
+      } else {
+        healthBar.classList.add('health-low');
+      }
+    }
   }
 }
 

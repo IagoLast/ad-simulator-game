@@ -105,8 +105,33 @@ export class Player {
   
   public updateHealthDisplay(): void {
     const healthDisplay = document.getElementById('health');
+    const healthBar = document.getElementById('health-bar');
+    
     if (healthDisplay) {
-      healthDisplay.textContent = `Health: ${this.health}%`;
+      // Update text display
+      const healthText = healthDisplay.childNodes[0];
+      if (healthText) {
+        healthText.textContent = `Health: ${this.health}%`;
+      } else {
+        // Fallback if the structure is different
+        healthDisplay.textContent = `Health: ${this.health}%`;
+      }
+      
+      // Update health bar width
+      if (healthBar) {
+        healthBar.style.width = `${this.health}%`;
+        
+        // Update health bar color based on health level
+        healthBar.classList.remove('health-high', 'health-medium', 'health-low');
+        
+        if (this.health > 60) {
+          healthBar.classList.add('health-high');
+        } else if (this.health > 30) {
+          healthBar.classList.add('health-medium');
+        } else {
+          healthBar.classList.add('health-low');
+        }
+      }
     }
   }
 
