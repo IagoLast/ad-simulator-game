@@ -1,4 +1,4 @@
-import { Server, Socket } from 'socket.io';
+import { Server, Socket, Namespace } from 'socket.io';
 import { EntityType, Exit, GameState, HitEvent, MapData, PlayerMovement, PlayerState, ShootEvent, SocketEvents, WeaponType, WeaponConfig } from '../../shared/types';
 import { MapGenerator } from './MapGenerator';
 
@@ -74,7 +74,7 @@ class Projectile {
  * GameServer handles all the game logic and player connections
  */
 export class GameServer {
-  private io: Server;
+  private io: Server | Namespace;
   private gameState: GameState;
   private players: Map<string, PlayerState>;
   private mapGenerator: MapGenerator;
@@ -95,9 +95,9 @@ export class GameServer {
   
   /**
    * Create a new GameServer instance
-   * @param io Socket.io server instance
+   * @param io Socket.io server or namespace instance
    */
-  constructor(io: Server) {
+  constructor(io: Server | Namespace) {
     this.io = io;
     this.players = new Map();
     

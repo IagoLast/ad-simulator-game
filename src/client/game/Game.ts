@@ -59,8 +59,10 @@ export class Game {
     // Initialize map renderer
     this.mapRenderer = new MapRenderer(this.scene);
     
-    // Initialize socket connection
-    this.socket = io();
+    // Initialize socket connection using the current path as namespace
+    const currentPath = window.location.pathname;
+    const namespace = currentPath === '/' ? '' : currentPath; // Use namespace if not on root path
+    this.socket = io(namespace);
     
     // Initialize players collection
     this.players = new Map();
