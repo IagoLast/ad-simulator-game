@@ -449,6 +449,9 @@ function animate(): void {
     
     // Update weapon system
     weaponManager.update(delta);
+    
+    // Update gameState health from player health
+    gameState.health = player.health;
   }
   
   // Update flag timer

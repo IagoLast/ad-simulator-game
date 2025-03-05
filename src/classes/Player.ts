@@ -101,6 +101,12 @@ export class Player {
   public takeDamage(amount: number): void {
     this.health = Math.max(0, this.health - amount);
     this.updateHealthDisplay();
+    
+    // Check if player has died
+    if (this.health <= 0) {
+      // Call the showGameOverScreen function from the game
+      this.showDeathScreen();
+    }
   }
   
   public updateHealthDisplay(): void {
@@ -133,6 +139,59 @@ export class Player {
         }
       }
     }
+  }
+
+  private showDeathScreen(): void {
+    // Create a game over notification
+    const gameOverScreen = document.createElement('div');
+    gameOverScreen.style.position = 'absolute';
+    gameOverScreen.style.top = '0';
+    gameOverScreen.style.left = '0';
+    gameOverScreen.style.width = '100%';
+    gameOverScreen.style.height = '100%';
+    gameOverScreen.style.background = 'rgba(0,0,0,0.8)';
+    gameOverScreen.style.display = 'flex';
+    gameOverScreen.style.flexDirection = 'column';
+    gameOverScreen.style.justifyContent = 'center';
+    gameOverScreen.style.alignItems = 'center';
+    gameOverScreen.style.color = 'white';
+    gameOverScreen.style.fontFamily = 'Arial, sans-serif';
+    gameOverScreen.style.zIndex = '1000';
+    
+    const title = document.createElement('h1');
+    title.textContent = 'YOU DIED!';
+    title.style.fontSize = '5rem';
+    title.style.marginBottom = '20px';
+    title.style.color = '#FF3333'; // Red color
+    
+    const message = document.createElement('p');
+    message.textContent = 'You were overwhelmed by the ads! Try again to survive longer.';
+    message.style.fontSize = '1.5rem';
+    message.style.marginBottom = '40px';
+    
+    const restartButton = document.createElement('button');
+    restartButton.textContent = 'Try Again';
+    restartButton.style.padding = '15px 30px';
+    restartButton.style.fontSize = '1.2rem';
+    restartButton.style.background = '#4CAF50';
+    restartButton.style.border = 'none';
+    restartButton.style.borderRadius = '5px';
+    restartButton.style.cursor = 'pointer';
+    
+    restartButton.addEventListener('click', () => {
+      document.body.removeChild(gameOverScreen);
+      // Reload the page to restart the game
+      window.location.reload();
+    });
+    
+    gameOverScreen.appendChild(title);
+    gameOverScreen.appendChild(message);
+    gameOverScreen.appendChild(restartButton);
+    
+    document.body.appendChild(gameOverScreen);
+    
+    // Unlock controls when showing game over screen
+    this.controls.unlock();
   }
 
   /**
