@@ -186,7 +186,7 @@ export class AdManager {
     const newObstacles: Obstacle[] = [];
     
     // Wall ads configuration
-    const offset = 7; // Distance from walls
+    const offset = 10; // Distance from walls
     
     // Set standard aspect ratio for all ads (width/height)
     const aspectRatio = 1.8; // Typical billboard aspect ratio

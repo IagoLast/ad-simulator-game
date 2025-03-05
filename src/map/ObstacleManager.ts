@@ -3,7 +3,7 @@ import { Obstacle } from "../types";
 import { MazeGenerator } from "./MazeGenerator";
 import { Boundaries } from "./Boundaries";
 import { AdManager } from "./AdManager";
-import { Ad } from "../classes/ads/Ad";
+import { Ad } from '../classes/ads/Ad';
 
 /**
  * Manages all obstacles and elements in the game world
@@ -12,6 +12,7 @@ export class ObstacleManager {
   private obstacles: Obstacle[] = [];
   private worldSize: number = 100;
   private wallHeight: number = 100;
+  private exitPosition: THREE.Vector3 | null = null;
   
   // Component managers
   private mazeGenerator: MazeGenerator;
@@ -33,8 +34,11 @@ export class ObstacleManager {
     this.obstacles = [];
     
     // 1. Generate the maze and get ad positions
-    const mazeResult = this.mazeGenerator.generateMaze(6);
+    const mazeResult = this.mazeGenerator.generateMaze(20);
     this.obstacles = [...mazeResult.obstacles];
+    
+    // Store the exit position if one was created
+    this.exitPosition = mazeResult.exitPosition;
     
     // 2. Create the boundary walls
     const boundaryObstacles = this.boundaries.createBoundaryWalls();
@@ -72,6 +76,29 @@ export class ObstacleManager {
    * Find a suitable spawn position
    */
   public findSpawnPosition(): THREE.Vector3 {
+    // If there's an exit position, use it as a spawn point (but moved inward a bit)
+    if (this.exitPosition) {
+      // Move the spawn position slightly inward from the exit (5 units)
+      // Determine which edge the exit is on
+      const spawnPos = this.exitPosition.clone();
+      
+      // Adjust the spawn point based on which edge the exit is closest to
+      if (Math.abs(spawnPos.x) > Math.abs(spawnPos.z)) {
+        // Exit is on east/west edge
+        spawnPos.x += (spawnPos.x > 0) ? -5 : 5; // Move away from edge
+      } else {
+        // Exit is on north/south edge
+        spawnPos.z += (spawnPos.z > 0) ? -5 : 5; // Move away from edge
+      }
+      
+      // Set y to player height
+      spawnPos.y = 1;
+      
+      console.log(`Using maze exit as spawn point at (${spawnPos.x.toFixed(2)}, ${spawnPos.y}, ${spawnPos.z.toFixed(2)})`);
+      return spawnPos;
+    }
+    
+    // Fallback to random position if no exit is defined
     // Start with a default position
     const position = new THREE.Vector3(0, 1, 0);
     
