@@ -252,6 +252,7 @@ export class Game {
   private setupSocketEvents(): void {
     // Handle game state updates
     this.socket.on(SocketEvents.GAME_STATE, (gameState: GameState) => {
+      console.info('GAME STATE RECEIVED');
       
       // Store the previous flag carrier to detect changes
       const previousFlagCarrier = this.flagCarrier;
@@ -339,7 +340,8 @@ export class Game {
     
     // Handle player join events
     this.socket.on(SocketEvents.PLAYER_JOINED, (playerState: PlayerState) => {
-      
+      console.info('PLAYER JOINED RECEIVED');
+
       // Don't create a duplicate player if already exists
       if (playerState.id === this.socket.id || this.players.has(playerState.id)) {
         return;
@@ -357,7 +359,7 @@ export class Game {
     
     // Handle player leave events
     this.socket.on(SocketEvents.PLAYER_LEFT, (playerId: string) => {
-      
+      console.info('PLAYER_LEFT RECEIVED');
       // Remove player from the scene
       if (this.players.has(playerId)) {
         const player = this.players.get(playerId);
@@ -376,6 +378,7 @@ export class Game {
     
     // Handle player movement updates from other players
     this.socket.on(SocketEvents.PLAYER_MOVED, (movement: PlayerMovement) => {
+      console.info('PLAYER_MOVED RECEIVED');
       // Only process if it's for another player (not local player)
       if (movement.playerId !== this.socket.id && this.players.has(movement.playerId)) {
         const player = this.players.get(movement.playerId);
@@ -388,7 +391,8 @@ export class Game {
     
     // Handle map data
     this.socket.on(SocketEvents.MAP_DATA, (mapData: MapData) => {
-      
+      console.info('MAP_DATA RECEIVED');
+
       // Render the map
       this.mapRenderer.renderMap(mapData);
       
@@ -401,7 +405,7 @@ export class Game {
     
     // Handle flag captured events
     this.socket.on(SocketEvents.FLAG_CAPTURED, (data: { playerId: string, teamId: number }) => {
-      
+      console.info('FLAG_CAPTURED RECEIVED');
       // Update flag carrier status
       this.flagCarrier = data.playerId;
       
@@ -448,7 +452,7 @@ export class Game {
     
     // Handle flag returned events (team scored)
     this.socket.on(SocketEvents.FLAG_RETURNED, (teamId: number) => {
-      
+      console.info('FLAG_RETURNED RECEIVED');
       // Show game message
       const teamName = teamId === 1 ? 'Red Team' : 'Blue Team';
       const teamColor = teamId === 1 ? '#FF3333' : '#3333FF';
@@ -464,7 +468,7 @@ export class Game {
     
     // Handle game over events
     this.socket.on(SocketEvents.GAME_OVER, (data: { winningTeam: number }) => {
-      
+      console.info('GAME_OVER RECEIVED');
       this.gameOver = true;
       this.winningTeam = data.winningTeam;
       
@@ -476,7 +480,7 @@ export class Game {
     
     // Handle game restart events
     this.socket.on(SocketEvents.GAME_RESTART, () => {
-      
+      console.info('GAME_RESTART RECEIVED');
       // Reset game state
       this.gameOver = false;
       this.winningTeam = null;
@@ -497,6 +501,8 @@ export class Game {
       gravity: number,
       weaponType: WeaponType
     }) => {
+      console.info('PROJECTILE_CREATED RECEIVED');
+
       // Skip if this is our own projectile (we already created it locally)
       if (data.shooterId === this.socket.id) return;
       
@@ -511,7 +517,7 @@ export class Game {
     
     // Handle player hit events
     this.socket.on(SocketEvents.PLAYER_HIT, (data: HitEvent) => {
-      
+      console.info('PLAYER_HIT RECEIVED');
       // If local player was hit, apply damage
       if (data.targetId === this.socket.id && this.localPlayer) {
         this.localPlayer.takeDamage(data.damage);
@@ -527,7 +533,7 @@ export class Game {
     
     // Handle player death events
     this.socket.on(SocketEvents.PLAYER_DIED, (data: { playerId: string, killerId: string }) => {
-      
+      console.info('PLAYER_DIED RECEIVED');
       // Check if the dead player was carrying the flag
       const wasCarryingFlag = this.flagCarrier === data.playerId;
       
@@ -562,7 +568,7 @@ export class Game {
     
     // Handle player respawn events
     this.socket.on(SocketEvents.PLAYER_RESPAWNED, (data: { playerId: string, position: { x: number, y: number, z: number } }) => {
-      
+      console.info('PLAYER_RESPAWNED RECEIVED');
       // If it's the local player
       if (data.playerId === this.socket.id && this.localPlayer) {
         this.localPlayer.respawn(data.position);
@@ -582,6 +588,7 @@ export class Game {
       position: { x: number, y: number, z: number },
       playerId: string
     }) => {
+      console.info('FLAG_DROPPED RECEIVED');
       
       // If the flag carrier was the local player, remove flag
       if (data.playerId === this.socket.id && this.localPlayer) {
