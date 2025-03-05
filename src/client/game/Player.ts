@@ -799,17 +799,6 @@ export class Player {
    * Drop the flag at the current position
    */
   private dropFlag(): void {
-    // Only handle on server side, but notify server we dropped it
-    if (this.isLocalPlayer) {
-      // Emit event to server
-      const customEvent = new CustomEvent("flag_dropped", {
-        detail: {
-          position: this.position,
-          playerId: this.id,
-        },
-      });
-      document.dispatchEvent(customEvent);
-    }
     this.hasFlag = false;
   }
 
