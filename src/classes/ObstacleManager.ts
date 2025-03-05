@@ -1,286 +1,476 @@
 import * as THREE from 'three';
+import { Ad, SimpleAdStyle } from './Ad';
+import { ColorfulAdStyle } from './SimpleAdStyle';
 import { Obstacle } from '../types';
-import { Billboard, GenericBillboardStyle } from './Billboard';
+import { MazeGenerator, AdPosition } from './MazeGenerator';
 
 export class ObstacleManager {
   private obstacles: Obstacle[] = [];
   private scene: THREE.Scene;
-  private billboards: Billboard[] = [];
+  private ads: Ad[] = [];
   private advertisementTexts: string[] = [
+    // URLs and domains
     'www.TimeTime.in',
     'www.TheirStack.com',
+    'InfiniteLoop.io',
+    'NeverEndingQuery.com',
+    'ScreenGaze.net',
+    'CursorBlink.org',
+    'ByteMaze.dev',
+    'GameWorld3D.co',
+    // Short phrases
+    'GAME ON!',
+    'LEVEL UP',
+    'HIGH SCORE',
+    'NEW RELEASE',
+    'PLAY NOW',
+    // Medium-length text
+    'Join the Adventure',
+    'Unlock Premium Features',
+    'Limited Time Offer',
+    'Best Game of 2023',
+    'Challenge Yourself',
+    // Longer text that needs wrapping
+    'The Ultimate Gaming Experience Awaits You',
+    'Subscribe Now For Exclusive Content And Updates',
+    'New Weapons Available In The Store Today Only',
+    'Become The Champion Everyone Talks About',
+    'Discover Hidden Treasures In Secret Rooms'
   ];
-  
-  // Define world boundaries
   private worldSize: number = 100; // Size of world (goes from -worldSize to +worldSize)
   private wallHeight: number = 100; // Height of the boundary walls
   
+  // Array to store wall positions for ad placement
+  private adPositions: AdPosition[] = [];
+  
+  // Reference to our maze generator
+  private mazeGenerator: MazeGenerator;
+  
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+    this.mazeGenerator = new MazeGenerator(scene, this.worldSize);
   }
   
   public createObstacles(count: number = 50): void {
-    // Create both cubes and billboards
-    this.createCubeObstacles(Math.floor(count * 0.6)); // 60% of count will be cubes
-    this.createBillboards(Math.ceil(count * 0.4)); // 40% of count will be billboards
+    // Create the labyrinth first, since ads will be placed on maze walls
+    this.createCubeObstacles(Math.floor(count * 0.6));
+    
+    // Now place ads on the maze walls
+    this.createAds(Math.ceil(count * 0.4)); // 40% of count will be ads
     
     // Create boundary walls
     this.createBoundaryWalls();
   }
   
-  private createCubeObstacles(count: number): void {
-    // Create several random obstacles
-    for (let i = 0; i < count; i++) {
-      const size = Math.random() * 3 + 1;
-      const height = Math.random() * 3 + 1;
-      const geometry = new THREE.BoxGeometry(size, height, size);
-      const material = new THREE.MeshLambertMaterial({ color: 0x8b4513 }); // Brown
-      const obstacleMesh = new THREE.Mesh(geometry, material);
-      
-      // Random position within world boundaries (add a small margin)
-      const margin = 5;
-      const maxDistance = this.worldSize - margin;
-      const x = Math.random() * (maxDistance * 2) - maxDistance;
-      const y = height / 2;
-      const z = Math.random() * (maxDistance * 2) - maxDistance;
-      
-      obstacleMesh.position.set(x, y, z);
-      obstacleMesh.castShadow = true;
-      obstacleMesh.receiveShadow = true;
-      
-      this.scene.add(obstacleMesh);
-      
-      // Create obstacle with collider
-      const obstacle: Obstacle = {
-        mesh: obstacleMesh,
-        collider: {
-          position: new THREE.Vector3(x, y, z),
-          size: new THREE.Vector3(size, height, size)
-        }
-      };
-      
-      this.obstacles.push(obstacle);
-    }
+  private createCubeObstacles(_count: number): void {
+    // Use the MazeGenerator to create the labyrinth structure
+    const result = this.mazeGenerator.generateMaze(6); // Wall height = 6
+    
+    // Add the generated obstacles to our collection
+    this.obstacles.push(...result.obstacles);
+    
+    // Store wall positions for ad placement
+    this.adPositions = result.adPositions;
   }
   
-  private createBillboards(count: number): void {
-    for (let i = 0; i < count; i++) {
-      // Much more varied size range for billboards
-      const width = Math.random() * 6 + 2; // Between 2-8 units wide
-      const height = Math.random() * 4 + 1.5; // Between 1.5-5.5 units tall
+  private createAds(count: number): void {
+    // If no wall positions are available, fall back to random placement
+    if (this.adPositions.length === 0) {
+      this.createRandomAds(count);
+      return;
+    }
+    
+    // Use a subset of available wall positions for ads
+    const adCount = Math.min(count, Math.floor(this.adPositions.length * 0.4)); // Increased from 30% to 40%
+    
+    // Shuffle wall positions to get random ones
+    const shuffledPositions = [...this.adPositions].sort(() => Math.random() - 0.5);
+    
+    // Debug log
+    console.log(`Creating ${adCount} ads from ${this.adPositions.length} available positions`);
+    
+    // Keep track of placed ad positions to prevent overlapping
+    const placedAdPositions: Array<{
+      position: THREE.Vector3,
+      size: { width: number, height: number },
+      direction: string | null
+    }> = [];
+    
+    let adsCreated = 0;
+    let positionIndex = 0;
+    
+    // Try to place ads, but avoid overlaps
+    while (adsCreated < adCount && positionIndex < shuffledPositions.length) {
+      const wallData = shuffledPositions[positionIndex];
+      const wallPosition = wallData.position;
+      const direction = wallData.direction;
       
-      // Random position with better distribution
-      // Use different distribution patterns to create interesting arrangements
-      let x, z;
+      // Determine ad dimensions - larger dimensions for better visibility
+      const width = Math.random() * 3 + 3; // 3-6 units wide
+      const height = Math.random() * 2 + 2; // 2-4 units tall
       
-      // Choose a distribution pattern
-      const pattern = Math.floor(Math.random() * 3);
+      // Calculate rotation based on wall direction
+      let rotation = 0;
+      let offsetX = 0;
+      let offsetZ = 0;
       
-      // Maximum distance from center respecting world boundaries
-      const margin = 5;
-      const maxDistance = this.worldSize - margin;
-      
-      if (pattern === 0) {
-        // Grid-like pattern with some randomness
-        const gridSize = Math.min(25, maxDistance / 4); // Ensure grid fits within world
-        const gridLimit = Math.floor(maxDistance / gridSize);
-        const gridX = Math.floor(Math.random() * (gridLimit * 2)) - gridLimit;
-        const gridZ = Math.floor(Math.random() * (gridLimit * 2)) - gridLimit;
-        x = gridX * gridSize + (Math.random() * 10 - 5);
-        z = gridZ * gridSize + (Math.random() * 10 - 5);
-        
-        // Ensure within boundaries
-        x = Math.max(-maxDistance, Math.min(maxDistance, x));
-        z = Math.max(-maxDistance, Math.min(maxDistance, z));
-      } 
-      else if (pattern === 1) {
-        // Circular pattern with rings
-        const ringCount = 3;
-        const ringIndex = Math.floor(Math.random() * ringCount);
-        const radius = Math.min(30 + ringIndex * 25, maxDistance); // 30, 55, 80 units from center, up to maxDistance
-        const angle = Math.random() * Math.PI * 2;
-        x = Math.cos(angle) * radius;
-        z = Math.sin(angle) * radius;
-      }
-      else {
-        // Completely random but within boundaries
-        const radius = Math.min(20 + Math.random() * 80, maxDistance); // Between 20-100 units from center, capped at maxDistance
-        const angle = Math.random() * Math.PI * 2;
-        x = Math.cos(angle) * radius;
-        z = Math.sin(angle) * radius;
-      }
-      
-      // Adjust y position to account for billboard height
-      const y = height / 2;
-      
-      // Rotation options
-      const rotationStyle = Math.floor(Math.random() * 4);
-      let rotation;
-      
-      if (rotationStyle === 0) {
-        // Face toward center
-        rotation = Math.atan2(-z, -x);
-      } 
-      else if (rotationStyle === 1) {
-        // Face away from center
-        rotation = Math.atan2(-z, -x) + Math.PI;
-      }
-      else if (rotationStyle === 2) {
-        // Face tangential clockwise
-        rotation = Math.atan2(-z, -x) + Math.PI/2;
-      }
-      else {
-        // Face tangential counter-clockwise
-        rotation = Math.atan2(-z, -x) - Math.PI/2;
+      if (direction === 'north') {
+        rotation = Math.PI;
+        offsetZ = -5.1; // Significantly increased offset to place ad in front of wall
+      } else if (direction === 'south') {
+        rotation = 0;
+        offsetZ = 5.1; // Significantly increased offset to place ad in front of wall
+      } else if (direction === 'east') {
+        rotation = Math.PI / 2;
+        offsetX = 5.1; // Significantly increased offset to place ad in front of wall
+      } else if (direction === 'west') {
+        rotation = -Math.PI / 2;
+        offsetX = -5.1; // Significantly increased offset to place ad in front of wall
       }
       
-      // Get random advertisement text
-      const adText = this.advertisementTexts[Math.floor(Math.random() * this.advertisementTexts.length)];
-      
-      // Use the generic style for all billboards
-      const genericStyle = new GenericBillboardStyle();
-      
-      // Create the billboard with the generic style
-      const billboard = new Billboard(
-        this.scene,
-        new THREE.Vector3(x, y, z),
-        rotation,
-        adText,
-        width,
-        height,
-        genericStyle
+      // Calculate final position - randomize height for variety
+      // Make ads appear at different heights on the walls
+      const heightVariation = Math.random() * 2 - 0.5; // -0.5 to 1.5 units offset
+      const position = new THREE.Vector3(
+        wallPosition.x + offsetX,
+        wallPosition.y + heightVariation,
+        wallPosition.z + offsetZ
       );
       
-      // Add to obstacles for collision detection
-      this.obstacles.push(billboard.toObstacle());
+      // Check for overlapping with existing ads
+      const wouldOverlap = this.checkAdOverlap(
+        position,
+        { width, height },
+        direction,
+        placedAdPositions
+      );
       
-      // Store in billboard array
-      this.billboards.push(billboard);
+      if (!wouldOverlap) {
+        // Position is good, create the ad
+        // Pick a random advertisement text
+        const adText = this.getRandomAdText();
+        
+        // Create either a simple or colorful ad style based on random chance
+        const useColorful = Math.random() > 0.3; // 70% chance of colorful style
+        const adStyle = useColorful ? new ColorfulAdStyle() : new SimpleAdStyle();
+        
+        // Create the ad with the selected style
+        const ad = new Ad(
+          this.scene,
+          position,
+          rotation,
+          adText,
+          width,
+          height,
+          adStyle
+        );
+        
+        // Add to obstacles for collision detection
+        this.obstacles.push(ad.toObstacle());
+        
+        // Store in ad array
+        this.ads.push(ad);
+        
+        // Remember this position to avoid overlaps
+        placedAdPositions.push({
+          position,
+          size: { width, height },
+          direction
+        });
+        
+        adsCreated++;
+      }
+      
+      // Move to next position regardless of whether we placed an ad or not
+      positionIndex++;
     }
+    
+    console.log(`Created ${adsCreated} ads integrated with maze walls (${positionIndex} positions checked)`);
+  }
+  
+  // Fallback method for random ad placement
+  private createRandomAds(count: number): void {
+    console.log(`Creating ${count} random ads (fallback method)`);
+  
+    // Create a grid of positions for better visibility
+    const gridSize = Math.ceil(Math.sqrt(count));
+    const spacing = 20; // Units between ads
+    
+    // Keep track of placed ad positions to prevent overlapping
+    const placedAdPositions: Array<{
+      position: THREE.Vector3,
+      size: { width: number, height: number },
+      direction: string | null
+    }> = [];
+    
+    let adsCreated = 0;
+    let attempts = 0;
+    const maxAttempts = count * 10; // Allow several attempts per desired ad
+    
+    while (adsCreated < count && attempts < maxAttempts) {
+      attempts++;
+      
+      // Much more varied size range for ads
+      const width = Math.random() * 3 + 3; // 3-6 units wide
+      const height = Math.random() * 2 + 2; // 2-4 units tall
+      
+      // Calculate position in a grid formation
+      const row = Math.floor(adsCreated / gridSize);
+      const col = adsCreated % gridSize;
+      
+      // Center the grid and add some randomness
+      const centerOffset = (gridSize - 1) * spacing / 2;
+      const randomOffset = 5; // Maximum random offset
+      
+      // Add increasing randomness for failed placement attempts
+      const extraRandomness = Math.min((attempts - adsCreated) * 0.5, 10);
+      
+      const posX = (col * spacing - centerOffset) + (Math.random() * (randomOffset + extraRandomness) - (randomOffset + extraRandomness)/2);
+      const posZ = (row * spacing - centerOffset) + (Math.random() * (randomOffset + extraRandomness) - (randomOffset + extraRandomness)/2);
+      
+      // Randomize height between eye level and overhead
+      const posY = Math.random() * 2 + 3; // 3-5 units off the ground (eye level)
+      
+      // Random rotation - only 90-degree increments for better readability
+      const rotationOptions = [0, Math.PI/2, Math.PI, -Math.PI/2];
+      const rotation = rotationOptions[Math.floor(Math.random() * rotationOptions.length)];
+      
+      const position = new THREE.Vector3(posX, posY, posZ);
+      
+      // Check for overlapping with existing ads
+      const wouldOverlap = this.checkAdOverlap(
+        position,
+        { width, height },
+        null, // No specific direction for free-standing ads
+        placedAdPositions
+      );
+      
+      if (!wouldOverlap) {
+        // Position is good, create the ad
+        // Pick a random advertisement text
+        const adText = this.getRandomAdText();
+        
+        // Create either a simple or colorful ad style based on random chance
+        const useColorful = Math.random() > 0.3; // 70% chance of colorful style
+        const adStyle = useColorful ? new ColorfulAdStyle() : new SimpleAdStyle();
+        
+        // Create the ad with the selected style
+        const ad = new Ad(
+          this.scene,
+          position,
+          rotation,
+          adText,
+          width,
+          height,
+          adStyle
+        );
+        
+        // Add to obstacles for collision detection
+        this.obstacles.push(ad.toObstacle());
+        
+        // Store in ad array
+        this.ads.push(ad);
+        
+        // Remember this position to avoid overlaps
+        placedAdPositions.push({
+          position,
+          size: { width, height },
+          direction: null
+        });
+        
+        adsCreated++;
+      }
+    }
+    
+    console.log(`Created ${adsCreated} standalone ads in grid formation (after ${attempts} placement attempts)`);
   }
   
   /**
-   * Creates walls at the boundary of the world to prevent players, bots and projectiles from escaping
+   * Check if a proposed ad position would overlap with existing ads
+   * @param position Position to check
+   * @param size Dimensions of the ad
+   * @param direction Direction the ad is facing (for wall-mounted ads)
+   * @param existingAds Array of already placed ads
+   * @returns Whether the ad would overlap with any existing ads
    */
-  private createBoundaryWalls(): void {
-    const wallThickness = 2;
-    const wallColor = 0x555555; // Dark gray color for the walls
+  private checkAdOverlap(
+    position: THREE.Vector3,
+    size: { width: number, height: number },
+    direction: string | null,
+    existingAds: Array<{
+      position: THREE.Vector3,
+      size: { width: number, height: number },
+      direction: string | null
+    }>
+  ): boolean {
+    // Minimum safe distance between ads
+    const minDistanceX = 8; // Increased horizontal gap
+    const minDistanceY = 6; // Increased vertical gap
+    const minDistanceZ = 8; // Increased depth gap
     
-    // Create material with slight transparency for visibility
-    const wallMaterial = new THREE.MeshLambertMaterial({ 
-      color: wallColor,
+    // Check against each existing ad
+    for (const existingAd of existingAds) {
+      // Skip checking ads facing different directions on walls
+      // (we only care about ads on the same wall face)
+      if (direction && existingAd.direction && direction !== existingAd.direction) {
+        continue;
+      }
+      
+      // Calculate distance between centers
+      const dx = Math.abs(position.x - existingAd.position.x);
+      const dy = Math.abs(position.y - existingAd.position.y);
+      const dz = Math.abs(position.z - existingAd.position.z);
+      
+      // Calculate minimum separation for non-overlap
+      const requiredX = (size.width + existingAd.size.width) / 2 + minDistanceX;
+      const requiredY = (size.height + existingAd.size.height) / 2 + minDistanceY;
+      
+      // For free-standing ads, check in both X and Z dimensions
+      // For wall-mounted ads, the check depends on the wall orientation
+      if (direction === 'north' || direction === 'south') {
+        // Ads on north/south walls extend in X direction
+        if (dx < requiredX && dy < requiredY && dz < minDistanceZ) {
+          return true; // Would overlap
+        }
+      } else if (direction === 'east' || direction === 'west') {
+        // Ads on east/west walls extend in Z direction
+        if (dx < minDistanceZ && dy < requiredY && dz < requiredX) {
+          return true; // Would overlap
+        }
+      } else {
+        // Free-standing ads - check in all dimensions
+        const requiredZ = (size.width + existingAd.size.width) / 2 + minDistanceZ;
+        if (dx < requiredX && dy < requiredY && dz < requiredZ) {
+          return true; // Would overlap
+        }
+      }
+    }
+    
+    // No overlaps found
+    return false;
+  }
+  
+  private createBoundaryWalls(): void {
+    // Create transparent walls at the edges of the world to contain the player
+    const wallMaterial = new THREE.MeshBasicMaterial({
+      color: 0x555555,
       transparent: true,
       opacity: 0.7
     });
     
-    // Create the four walls (North, South, East, West)
+    // Create walls on all 4 sides
     const walls = [
-      // North wall (positive Z)
       {
-        size: new THREE.Vector3(this.worldSize * 2 + wallThickness * 2, this.wallHeight, wallThickness),
+        size: new THREE.Vector3(this.worldSize * 2 + 2 * 2, this.wallHeight, 2),
         position: new THREE.Vector3(0, this.wallHeight / 2, this.worldSize)
       },
-      // South wall (negative Z)
       {
-        size: new THREE.Vector3(this.worldSize * 2 + wallThickness * 2, this.wallHeight, wallThickness),
+        size: new THREE.Vector3(this.worldSize * 2 + 2 * 2, this.wallHeight, 2),
         position: new THREE.Vector3(0, this.wallHeight / 2, -this.worldSize)
       },
-      // East wall (positive X)
       {
-        size: new THREE.Vector3(wallThickness, this.wallHeight, this.worldSize * 2),
+        size: new THREE.Vector3(2, this.wallHeight, this.worldSize * 2 + 2 * 2),
         position: new THREE.Vector3(this.worldSize, this.wallHeight / 2, 0)
       },
-      // West wall (negative X)
       {
-        size: new THREE.Vector3(wallThickness, this.wallHeight, this.worldSize * 2),
+        size: new THREE.Vector3(2, this.wallHeight, this.worldSize * 2 + 2 * 2),
         position: new THREE.Vector3(-this.worldSize, this.wallHeight / 2, 0)
       }
     ];
     
-    // Create each wall and add it to the scene and obstacles array
-    walls.forEach(wallDef => {
-      const geometry = new THREE.BoxGeometry(wallDef.size.x, wallDef.size.y, wallDef.size.z);
-      const wallMesh = new THREE.Mesh(geometry, wallMaterial);
+    // Create and add each wall
+    for (const wall of walls) {
+      const geometry = new THREE.BoxGeometry(wall.size.x, wall.size.y, wall.size.z);
+      const mesh = new THREE.Mesh(geometry, wallMaterial);
+      mesh.position.set(wall.position.x, wall.position.y, wall.position.z);
       
-      wallMesh.position.copy(wallDef.position);
-      wallMesh.castShadow = true;
-      wallMesh.receiveShadow = true;
-      
-      this.scene.add(wallMesh);
+      this.scene.add(mesh);
       
       // Add to obstacles for collision detection
       const obstacle: Obstacle = {
-        mesh: wallMesh,
+        mesh: mesh,
         collider: {
-          position: wallDef.position.clone(),
-          size: wallDef.size.clone()
+          position: new THREE.Vector3(wall.position.x, wall.position.y, wall.position.z),
+          size: new THREE.Vector3(wall.size.x, wall.size.y, wall.size.z)
         }
       };
       
       this.obstacles.push(obstacle);
-    });
+    }
     
-    console.log("Boundary walls created");
+    console.log('Created boundary walls');
   }
   
   public getObstacles(): Obstacle[] {
     return this.obstacles;
   }
   
-  public getBillboards(): Billboard[] {
-    return this.billboards;
+  public getAds(): Ad[] {
+    return this.ads;
   }
   
   public findSpawnPosition(): THREE.Vector3 {
-    // Find a safe spawn position away from obstacles
-    // Use the worldSize property to constrain the spawn position
-    const safeMargin = 10; // Stay at least 10 units away from the walls
-    const maxDistance = this.worldSize - safeMargin;
+    // Find a random position that doesn't collide with any obstacles
+    const margin = 10; // Keep away from world edges
+    const worldBound = this.worldSize - margin;
     
-    let spawnX = Math.random() * (maxDistance * 2) - maxDistance;
-    let spawnZ = Math.random() * (maxDistance * 2) - maxDistance;
+    let x = Math.random() * (worldBound * 2) - worldBound;
+    let z = Math.random() * (worldBound * 2) - worldBound;
     
-    // Ensure player doesn't spawn inside an obstacle
-    let validSpawn = false;
+    let validPosition = false;
     let attempts = 0;
-    const maxAttempts = 100; // Prevent infinite loops
+    const maxAttempts = 100;
     
-    while (!validSpawn && attempts < maxAttempts) {
+    while (!validPosition && attempts < maxAttempts) {
       attempts++;
-      validSpawn = true;
+      validPosition = true;
+      
+      // Check all obstacles for collisions
       for (const obstacle of this.obstacles) {
         const obstaclePos = obstacle.mesh.position;
-        const distance = Math.sqrt(
-          Math.pow(spawnX - obstaclePos.x, 2) + 
-          Math.pow(spawnZ - obstaclePos.z, 2)
-        );
-        
-        // Check distance from obstacle (consider obstacle size)
         const obstacleSize = obstacle.collider.size;
-        const minSafeDistance = 3 + Math.max(obstacleSize.x, obstacleSize.z) / 2;
         
-        if (distance < minSafeDistance) {
-          validSpawn = false;
-          spawnX = Math.random() * (maxDistance * 2) - maxDistance;
-          spawnZ = Math.random() * (maxDistance * 2) - maxDistance;
+        // Calculate safe distance (half obstacle width/depth + player radius + margin)
+        const safeDistanceX = obstacleSize.x / 2 + 1 + 1; // player radius + margin
+        const safeDistanceZ = obstacleSize.z / 2 + 1 + 1;
+        
+        // Check if too close to obstacle
+        if (
+          Math.abs(x - obstaclePos.x) < safeDistanceX &&
+          Math.abs(z - obstaclePos.z) < safeDistanceZ
+        ) {
+          validPosition = false;
+          
+          // Try a new position
+          x = Math.random() * (worldBound * 2) - worldBound;
+          z = Math.random() * (worldBound * 2) - worldBound;
           break;
         }
       }
     }
     
     if (attempts >= maxAttempts) {
-      console.warn("Couldn't find ideal spawn position after max attempts. Using fallback position.");
-      // Fallback to a position we know is safe (center of the world, but elevated)
-      return new THREE.Vector3(0, 5, 0);
+      console.warn('Could not find a valid spawn position after maximum attempts. Using last generated position.');
     }
     
-    return new THREE.Vector3(spawnX, 1.8, spawnZ);
+    return new THREE.Vector3(x, 2, z); // 2 units above ground
   }
   
-  // Add a new advertisement text
+  /**
+   * Add a new advertisement text to the pool
+   * @param text The text to add
+   */
   public addAdvertisementText(text: string): void {
     if (!this.advertisementTexts.includes(text)) {
       this.advertisementTexts.push(text);
     }
+  }
+  
+  /**
+   * Get a random advertisement text
+   * @returns A random text from the advertisement pool
+   */
+  private getRandomAdText(): string {
+    return this.advertisementTexts[Math.floor(Math.random() * this.advertisementTexts.length)];
   }
 } 

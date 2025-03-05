@@ -374,7 +374,7 @@ export class WeaponManager {
     // Obtener posición del objetivo
     let targetPosition: THREE.Vector3;
     
-    // Manejar objetos Group (como billboards)
+    // Manejar objetos Group (como ads)
     if (target instanceof THREE.Group) {
       targetPosition = new THREE.Vector3();
       target.getWorldPosition(targetPosition);

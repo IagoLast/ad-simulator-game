@@ -282,11 +282,6 @@ function createLighting(): void {
   scene.add(directionalLight);
 }
 
-// @ts-ignore - Implemented but not currently used - part of the public API
-function createObstacles(): void {
-  obstacleManager.createObstacles(120);
-}
-
 // Handle collisions between player and obstacles
 function handleCollisions(): void {
   collisionSystem.update();
@@ -450,7 +445,7 @@ function init(): void {
   
   // Initialize obstacles
   obstacleManager = new ObstacleManager(scene);
-  obstacleManager.createObstacles(120);
+  obstacleManager.createObstacles(200);
   
   // Make obstacleManager available globally for other systems
   (window as any).obstacleManager = obstacleManager;
