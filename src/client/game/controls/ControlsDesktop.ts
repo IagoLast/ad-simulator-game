@@ -13,7 +13,7 @@ export interface MovementInput {
 /**
  * Controls class for handling keyboard and mouse input
  */
-export class Controls {
+export class ControlsDesktop {
   private keys: { [key: string]: boolean };
   private mouseX: number;
   private mouseY: number;

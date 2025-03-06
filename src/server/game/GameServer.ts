@@ -352,7 +352,7 @@ export class GameServer {
 
     // Respawn at team exit
     const teamExit = this.teamExits.get(player.teamId);
-    
+
     if (teamExit) {
       player.position = { ...teamExit.position };
     }
@@ -407,10 +407,12 @@ export class GameServer {
         // Broadcast to other players that a new player has joined
         socket.broadcast.emit(SocketEvents.PLAYER_JOINED, player);
 
-        // Send the current game to all players
+        // Send the current game to all players and the new one
         socket.broadcast.emit(SocketEvents.GAME_STATE, this.gameState);
+        socket.emit(SocketEvents.GAME_STATE, this.gameState);
 
-        // Also send map data separately for easier processing
+        // Resend map data to all players
+        socket.broadcast.emit(SocketEvents.MAP_DATA, this.mapData);
         socket.emit(SocketEvents.MAP_DATA, this.mapData);
       });
 
@@ -478,6 +480,8 @@ export class GameServer {
       socket.on("disconnect", () => {
         console.log(`Player disconnected: ${socket.id}`);
 
+        const player = this.players.get(socket.id);
+
         // Clear any respawn timeout
         const timeout = this.respawnTimeouts.get(socket.id);
         if (timeout) {
@@ -485,18 +489,26 @@ export class GameServer {
           this.respawnTimeouts.delete(socket.id);
         }
 
-        // Check if the disconnecting player was carrying the flag
-        if (this.flagCarrier === socket.id) {
-          this.flagCarrier = null;
-          this.resetFlag();
-        }
-
-        // Remove player from game state and update team count
-        const player = this.players.get(socket.id);
         if (player) {
           // Decrease team count
           const teamCount = this.teamCounts.get(player.teamId) || 0;
           this.teamCounts.set(player.teamId, Math.max(0, teamCount - 1));
+
+          if (player.hasFlag) {
+            this.flagCarrier = null;
+            
+            this.io.emit(SocketEvents.FLAG_DROPPED, {
+              playerId: socket.id,
+              position: player.position,
+            });
+
+            this.mapData.entities.push({
+              type: EntityType.FLAG,
+              position: player.position,
+            });
+
+            this.updateGameState();
+          }
 
           // Remove player
           this.players.delete(socket.id);
@@ -513,17 +525,6 @@ export class GameServer {
         socket.emit(SocketEvents.MAP_DATA, this.mapData);
       });
     });
-  }
-
-  /**
-   * Reset the flag when carrier disconnects
-   */
-  private resetFlag(): void {
-    // Reset flag status in game state
-    this.gameState.flagCarrier = undefined;
-
-    // Let clients know to regenerate the flag
-    this.io.emit(SocketEvents.MAP_DATA, this.mapData);
   }
 
   /**
@@ -685,9 +686,6 @@ export class GameServer {
       playerId,
       position,
     });
-
-    // Also send updated map data so clients can see the flag
-    this.io.emit(SocketEvents.MAP_DATA, this.mapData);
   }
 
   private _checkIfFlagIsCaptured(player: PlayerState): void {
@@ -715,6 +713,11 @@ export class GameServer {
         playerId: player.id,
         teamId: player.teamId,
       });
+      // Remove flag entity from the map
+      this.mapData.entities = this.mapData.entities.filter(
+        (entity) => entity.type !== EntityType.FLAG
+      );
+      this.updateGameState();
     }
   }
 

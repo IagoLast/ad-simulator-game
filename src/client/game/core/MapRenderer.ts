@@ -8,7 +8,7 @@ import {
   Cube,
 } from "../../../shared/types";
 import { BillboardClass } from "../3d/billboard.3d";
-import { Cube3D } from '../objects/Cube3D';
+import { Cube3D } from "../objects/Cube3D";
 
 /**
  * MapRenderer class for rendering map entities like walls and exits
@@ -16,7 +16,6 @@ import { Cube3D } from '../objects/Cube3D';
 export class MapRenderer {
   private scene: THREE.Scene;
   private mapEntities: THREE.Object3D[] = [];
-  private flagObject: THREE.Object3D | null = null;
 
   /**
    * Create a new MapRenderer
@@ -41,11 +40,6 @@ export class MapRenderer {
         if (obj) {
           this.scene.add(obj);
           this.mapEntities.push(obj);
-
-          // Store flag object reference
-          if (entity.type === EntityType.FLAG) {
-            this.flagObject = obj;
-          }
         }
       });
     }
@@ -58,20 +52,31 @@ export class MapRenderer {
    * Get the flag object for collision detection
    */
   public getFlag(): THREE.Object3D | null {
-    return this.flagObject;
+    return this.mapEntities.find(
+      (entity) => entity.userData.type === EntityType.FLAG
+    ) as THREE.Object3D | null;
   }
 
   /**
    * Remove the flag from the scene (when captured)
    */
   public removeFlag(): void {
-    if (this.flagObject) {
-      this.scene.remove(this.flagObject);
-      const index = this.mapEntities.indexOf(this.flagObject);
-      if (index > -1) {
-        this.mapEntities.splice(index, 1);
-      }
-      this.flagObject = null;
+    const flag = this.getFlag();
+    if (flag) {
+      this.scene.remove(flag);
+    }
+
+    this.mapEntities = this.mapEntities.filter(
+      (e) => e.userData.type !== EntityType.FLAG
+    );
+  }
+
+  public addFlag(entity: Flag): void {
+    const flag = this.createEntity(entity);
+
+    if (flag) {
+      this.scene.add(flag);
+      this.mapEntities.push(flag);
     }
   }
 
@@ -86,9 +91,6 @@ export class MapRenderer {
 
     // Clear entities array
     this.mapEntities = [];
-
-    // Reset flag
-    this.flagObject = null;
   }
 
   /**
@@ -348,13 +350,13 @@ export class MapRenderer {
   private createCube(entity: Cube): THREE.Group {
     // Create the cube using the dedicated class
     const cube = new Cube3D(entity);
-    
+
     // Mark as collidable for collision detection
     cube.mesh.userData = {
       type: EntityType.CUBE,
-      isCollidable: true
+      isCollidable: true,
     };
-    
+
     return cube.mesh;
   }
 

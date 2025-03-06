@@ -12,10 +12,12 @@ import {
   HitEvent,
   WeaponConfig,
 } from "../../shared/types";
-import { Controls } from "./Controls";
 import { Player } from "./Player";
 import { MapRenderer } from "./core/MapRenderer";
 import { Sound } from "./core/Sound";
+import { UI } from "./UI";
+import controlsFactory from "./controls/controls.factory";
+import { MovementInput } from "./controls/ControlsDesktop";
 
 /**
  * Game class for a first-person multiplayer 3D game
@@ -27,17 +29,16 @@ export class Game {
   private socket: Socket;
   private players: Map<string, Player>;
   private localPlayer: Player | null;
-  private controls: Controls;
+  private controls: any; // Will be either ControlsDesktop or ControlsMobile
   private lastUpdateTime: number;
   private mapRenderer: MapRenderer;
   private walls: THREE.Object3D[] = [];
-  private teamInfo: HTMLElement | null = null;
-  private gameMessageElement: HTMLElement | null = null;
   private flagObject: THREE.Object3D | null = null;
   private flagCarrier: string | null = null;
   private gameOver: boolean = false;
   private winningTeam: number | null = null;
   private sound: Sound;
+  private ui: UI;
 
   /**
    * Create a new game instance
@@ -61,11 +62,13 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     document.body.appendChild(this.renderer.domElement);
 
-    // Create team info display
-    this.createTeamInfo();
+    // Check if we're on a mobile device
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
 
-    // Create game message display
-    this.createGameMessage();
+    // Initialize UI
+    this.ui = new UI(isMobileDevice);
 
     // Initialize map renderer
     this.mapRenderer = new MapRenderer(this.scene);
@@ -84,7 +87,10 @@ export class Game {
     this.localPlayer = null;
 
     // Initialize controls
-    this.controls = new Controls(this.renderer.domElement);
+    this.controls = controlsFactory.createControls(this.renderer.domElement);
+
+    // Initialize sound
+    this.sound = new Sound();
 
     // Handle window resize
     window.addEventListener("resize", this.onWindowResize.bind(this));
@@ -101,8 +107,6 @@ export class Game {
     // Start animation loop
     this.animate();
 
-    this.sound = Sound.getInstance();
-
     // Add event listener for toggling sound with 'M' key
     window.addEventListener("keydown", (event) => {
       if (event.key.toLowerCase() === "m") {
@@ -114,153 +118,6 @@ export class Game {
         );
       }
     });
-  }
-
-  /**
-   * Create team info display
-   */
-  private createTeamInfo(): void {
-    // Create team info element
-    this.teamInfo = document.createElement("div");
-    this.teamInfo.style.position = "absolute";
-    this.teamInfo.style.top = "20px";
-    this.teamInfo.style.left = "20px";
-    this.teamInfo.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-    this.teamInfo.style.color = "white";
-    this.teamInfo.style.padding = "10px";
-    this.teamInfo.style.borderRadius = "5px";
-    this.teamInfo.style.fontFamily = "Arial, sans-serif";
-    this.teamInfo.style.fontSize = "16px";
-    this.teamInfo.style.zIndex = "100";
-
-    document.body.appendChild(this.teamInfo);
-  }
-
-  /**
-   * Create game message display for CTF status
-   */
-  private createGameMessage(): void {
-    // Create game message element
-    this.gameMessageElement = document.createElement("div");
-    this.gameMessageElement.style.position = "absolute";
-    this.gameMessageElement.style.top = "20px";
-    this.gameMessageElement.style.left = "50%";
-    this.gameMessageElement.style.transform = "translateX(-50%)";
-    this.gameMessageElement.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-    this.gameMessageElement.style.color = "white";
-    this.gameMessageElement.style.padding = "10px 20px";
-    this.gameMessageElement.style.borderRadius = "5px";
-    this.gameMessageElement.style.fontFamily = "Arial, sans-serif";
-    this.gameMessageElement.style.fontSize = "18px";
-    this.gameMessageElement.style.fontWeight = "bold";
-    this.gameMessageElement.style.zIndex = "100";
-    this.gameMessageElement.style.textAlign = "center";
-    this.gameMessageElement.style.transition = "all 0.3s ease";
-    this.gameMessageElement.style.opacity = "0";
-
-    document.body.appendChild(this.gameMessageElement);
-  }
-
-  /**
-   * Update team info display
-   */
-  private updateTeamInfo(): void {
-    if (!this.teamInfo || !this.localPlayer) return;
-
-    const teamId = this.localPlayer.getTeamId();
-    const teamColor = teamId === 1 ? "red" : "blue";
-    const teamName = teamId === 1 ? "Red Team" : "Blue Team";
-
-    // Count players on each team
-    let team1Count = 0;
-    let team2Count = 0;
-
-    this.players.forEach((player) => {
-      if (player.getTeamId() === 1) {
-        team1Count++;
-      } else {
-        team2Count++;
-      }
-    });
-
-    // Add local player to count
-    if (this.localPlayer.getTeamId() === 1) {
-      team1Count++;
-    } else {
-      team2Count++;
-    }
-
-    this.teamInfo.innerHTML = `
-      <div style="display: flex; align-items: center; margin-bottom: 5px;">
-        <div style="width: 20px; height: 20px; background-color: ${teamColor}; margin-right: 10px; border-radius: 50%;"></div>
-        <div>You are on <strong>${teamName}</strong></div>
-      </div>
-      <div>Team Members: ${
-        this.localPlayer.getTeamId() === 1 ? team1Count : team2Count
-      }</div>
-      <div style="margin-top: 10px;">
-        <div style="display: flex; justify-content: space-between;">
-          <span>Red Team: ${team1Count}</span>
-          <span>Blue Team: ${team2Count}</span>
-        </div>
-      </div>
-    `;
-
-    // Add flag status if someone has the flag
-    if (this.flagCarrier) {
-      const carrier =
-        this.players.get(this.flagCarrier) ||
-        (this.localPlayer.getId() === this.flagCarrier
-          ? this.localPlayer
-          : null);
-
-      if (carrier) {
-        const carrierTeam =
-          carrier.getTeamId() === 1 ? "Red Team" : "Blue Team";
-        const isLocalPlayer = carrier === this.localPlayer;
-
-        this.teamInfo.innerHTML += `
-          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);">
-            <strong style="color: gold;">Flag Status: </strong>
-            <span>${
-              isLocalPlayer ? "You have" : carrierTeam + " has"
-            } the flag!</span>
-          </div>
-        `;
-      }
-    }
-  }
-
-  /**
-   * Show game message
-   * @param message The message to display
-   * @param color Optional text color
-   * @param duration How long to show the message in ms
-   */
-  private showGameMessage(
-    message: string,
-    color: string = "white",
-    duration: number = 3000
-  ): void {
-    if (!this.gameMessageElement) return;
-
-    this.gameMessageElement.textContent = message;
-    this.gameMessageElement.style.color = color;
-    this.gameMessageElement.style.opacity = "1";
-
-    // Clear any existing timeout
-    setTimeout(() => {
-      if (this.gameMessageElement) {
-        this.gameMessageElement.style.opacity = "0";
-      }
-    }, duration);
-
-    // Play win/lose sound when game ends
-    if (message.includes("win") || message.includes("Win")) {
-      const isWin =
-        message.includes("You win") || message.includes("Your team wins");
-      this.sound.playGameOverSound(isWin);
-    }
   }
 
   /**
@@ -313,6 +170,11 @@ export class Game {
       this.gameOver = gameState.gameOver || false;
       this.winningTeam = gameState.winningTeam || null;
 
+      // Update UI with the latest game state
+      if (this.localPlayer) {
+        this.ui.updateTeamInfo(gameState, this.localPlayer.getId(), this.flagCarrier);
+      }
+
       if (this.gameOver && this.winningTeam) {
         const winningTeamName =
           this.winningTeam === 1 ? "Red Team" : "Blue Team";
@@ -336,9 +198,6 @@ export class Game {
 
             // Attach camera to local player
             this.localPlayer.attachCamera(this.camera);
-
-            // Update team info
-            this.updateTeamInfo();
           } else {
             // Update existing local player
             this.localPlayer.updateFromState(playerState);
@@ -357,9 +216,6 @@ export class Game {
           }
         }
       });
-
-      // Update team info after processing players
-      this.updateTeamInfo();
     });
 
     // Handle player join events
@@ -377,9 +233,6 @@ export class Game {
       // Create a new player
       this.createPlayer(playerState);
 
-      // Update team info to reflect new player count
-      this.updateTeamInfo();
-
       // Play player join sound
       this.sound.play("player_join");
     });
@@ -395,9 +248,6 @@ export class Game {
         }
         this.players.delete(playerId);
       }
-
-      // Update team info to reflect new player count
-      this.updateTeamInfo();
 
       // Play player leave sound
       this.sound.play("player_leave");
@@ -442,8 +292,6 @@ export class Game {
         // Update flag carrier status
         this.flagCarrier = data.playerId;
 
-        
-
         // Show game message
         const isLocalPlayer = data.playerId === this.socket.id;
         const teamName = data.teamId === 1 ? "Red Team" : "Blue Team";
@@ -487,9 +335,6 @@ export class Game {
         // Remove flag from scene
         this.mapRenderer.removeFlag();
         this.flagObject = null;
-
-        // Update team info to show flag carrier
-        this.updateTeamInfo();
       }
     );
 
@@ -509,9 +354,6 @@ export class Game {
 
       // Clear flag carrier
       this.flagCarrier = null;
-
-      // Update team info
-      this.updateTeamInfo();
     });
 
     // Handle game over events
@@ -636,7 +478,6 @@ export class Game {
         // If the dead player was the flag carrier, update the UI
         if (wasCarryingFlag) {
           this.flagCarrier = null;
-          this.updateTeamInfo();
         }
       }
     );
@@ -681,29 +522,28 @@ export class Game {
 
         // If the flag carrier was another player, remove flag
         const player = this.players.get(data.playerId);
+        
         if (player) {
           player.setHasFlag(false);
         }
 
+        // Create the flag entity in the map
+        this.mapRenderer.addFlag({
+          type: EntityType.FLAG,
+          position: data.position,
+        });
+
         // Clear flag carrier status
         this.flagCarrier = null;
 
-        // Update team info to reflect flag status
-        this.updateTeamInfo();
-
         // Show message
         this.showGameMessage("Flag has been dropped!", "yellow", 3000);
-
-        // Wait for the flag to be added to the map by the server
-        setTimeout(() => {
-          // Request updated map data to ensure flag is visible
-          this.socket.emit("request_map_data");
-        }, 500);
       }
     );
 
     // Join the game when connected
     this.socket.on("connect", () => {
+      console.warn('CONNECTED TO SERVER');
       this.socket.emit(SocketEvents.JOIN);
     });
   }
@@ -1308,5 +1148,26 @@ export class Game {
     directionalLight.shadow.camera.bottom = -100;
 
     this.scene.add(directionalLight);
+  }
+
+  /**
+   * Show game message
+   * @param message The message to display
+   * @param color Optional text color
+   * @param duration How long to show the message in ms
+   */
+  private showGameMessage(
+    message: string,
+    color: string = "white",
+    duration: number = 3000
+  ): void {
+    this.ui.showGameMessage(message, color, duration);
+    
+    // Play win/lose sound when game ends
+    if (message.includes("win") || message.includes("Win")) {
+      const isWin =
+        message.includes("You win") || message.includes("Your team wins");
+      this.sound.playGameOverSound(isWin);
+    }
   }
 }
