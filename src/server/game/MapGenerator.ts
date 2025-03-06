@@ -22,7 +22,12 @@ interface GapPosition {
 export class MapGenerator {
   private width: number;
   private height: number;
-  private billboardTexts: string[] = ["www.timetime.in", "www.theirstack.com", "https://mcp-framework.com/", "Hawkings Education"];
+  private billboardTexts: string[] = [
+    "www.timetime.in",
+    "theirstack.com",
+    "https://mcp-framework.com/",
+    "Hawkings Education",
+  ];
 
   // Different billboard types/configurations
   private billboardTypes = [
@@ -65,7 +70,7 @@ export class MapGenerator {
     this.addExits(entities);
 
     // Add billboards as obstacles
-    this.addBillboards(entities);
+    // this.addBillboards(entities);
 
     // Add the flag for capture the flag gameplay
     this.addFlag(entities);

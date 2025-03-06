@@ -9,21 +9,28 @@ const server = http.createServer(app);
 
 // Configure Socket.IO with Docker-compatible options
 const io = new Server(server, {
-  transports: (process.env.SOCKET_TRANSPORTS || 'websocket,polling').split(',') as any,
+  transports: (process.env.SOCKET_TRANSPORTS || "websocket,polling").split(
+    ","
+  ) as any,
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
+    origin: "*",
+    methods: ["GET", "POST"],
   },
-  pingTimeout: 60000 // Increase timeout for better connection stability
+  pingTimeout: 60000, // Increase timeout for better connection stability
 });
 
 // Log server startup information
 console.log("Server starting up...");
 console.log("Environment:", process.env.NODE_ENV || "development");
-console.log("Socket.IO transports:", process.env.SOCKET_TRANSPORTS || "websocket,polling");
+console.log(
+  "Socket.IO transports:",
+  process.env.SOCKET_TRANSPORTS || "websocket,polling"
+);
 
 // Define game paths
 const gamePaths: string[] = [];
+
+const gameServers = new Map<string, GameServer>();
 
 // Serve static files from the dist/public directory
 app.use(express.static(path.join(__dirname, "../public")));
@@ -42,13 +49,15 @@ app.get("/games", (req, res) => {
 
 app.get("/:id", (req, res) => {
   // Only add the game path if it doesn't already exist
-  if (!gamePaths.includes(req.params.id)) {
-    gamePaths.push(req.params.id);
+
+  if (!gameServers.has(req.params.id)) {
     const namespace = io.of(`/${req.params.id}`);
     const gameServer = new GameServer(namespace);
     gameServer.initialize();
-    console.log(`Created game at /${req.params.id}`);
+    gameServers.set(req.params.id, gameServer);
+    console.log(`New server created at /${req.params.id}`);
   }
+  
   res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
@@ -64,5 +73,7 @@ server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
   console.log(`Environment variables: PORT=${process.env.PORT}`);
   console.log(`Open http://localhost:${PORT} in your browser to play locally`);
-  console.log(`Available games: ${gamePaths.map(path => `/${path}`).join(', ')}`);
+  console.log(
+    `Available games: ${gamePaths.map((path) => `/${path}`).join(", ")}`
+  );
 });
