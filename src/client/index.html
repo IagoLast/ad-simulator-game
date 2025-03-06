@@ -5,11 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Multiplayer FPS Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
+        * {
+            font-family: "Press Start 2P", system-ui !important;
+        }
+
         body {
             margin: 0;
             overflow: hidden;
-            font-family: Arial, sans-serif;
+            font-family: "Press Start 2P", system-ui;
         }
 
         canvas {
@@ -112,13 +119,13 @@
         // Check if we're on the root path and show the game selector
         if (window.location.pathname === '/') {
             document.getElementById('game-selector').style.display = 'block';
-            
+
             // Fetch available games from the server
             fetch('/games')
                 .then(response => response.json())
                 .then(data => {
                     const gameList = document.getElementById('game-list');
-                    
+
                     // If no games available, show a create game option
                     if (data.games.length === 0) {
                         const createGameLi = document.createElement('li');
@@ -128,23 +135,23 @@
                         createGameInput.style.padding = '10px';
                         createGameInput.style.marginBottom = '10px';
                         createGameInput.style.width = '100%';
-                        
+
                         const createGameButton = document.createElement('a');
                         createGameButton.href = '#';
                         createGameButton.textContent = 'Create New Game';
-                        createGameButton.onclick = function(e) {
+                        createGameButton.onclick = function (e) {
                             e.preventDefault();
                             const gameName = createGameInput.value.trim();
                             if (gameName) {
                                 window.location.href = `/${gameName}`;
                             }
                         };
-                        
+
                         createGameLi.appendChild(createGameInput);
                         createGameLi.appendChild(createGameButton);
                         gameList.appendChild(createGameLi);
                     }
-                    
+
                     // Add existing games
                     data.games.forEach(game => {
                         const li = document.createElement('li');
