@@ -34,7 +34,6 @@ export class Player {
   private respawnTime: number | null = null;
   private weapons: Map<WeaponType, Weapon> = new Map();
   private currentWeapon!: Weapon; // Using definite assignment assertion
-  private weaponMesh: THREE.Group | null = null;
 
   /**
    * Create a new player
@@ -76,38 +75,74 @@ export class Player {
     this.playerBody.castShadow = true;
     this.mesh.add(this.playerBody);
 
-    // Create team indicator (shoulder badge)
-    const badgeGeometry = new THREE.SphereGeometry(0.25, 16, 16);
-    const badgeMaterial = new THREE.MeshStandardMaterial({
+    // Add team color stripe to the body
+    const stripeGeometry = new THREE.BoxGeometry(1.01, this.playerHeight / 4, 1.01);
+    const stripeMaterial = new THREE.MeshStandardMaterial({
       color: playerState.color,
       emissive: playerState.color,
       emissiveIntensity: 0.5,
     });
-
-    this.teamIndicator = new THREE.Mesh(badgeGeometry, badgeMaterial);
-    this.teamIndicator.position.set(0, this.playerHeight - 0.5, 0.6); // Position on shoulder/chest
-
-    // Add team indicator only if it's not a local player (to avoid blocking view)
+    
+    const teamStripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
+    teamStripe.position.y = this.playerHeight / 2; // Place in middle of body
+    
+    // Only add team color stripe for non-local players to avoid view obstruction
     if (!isLocalPlayer) {
-      this.mesh.add(this.teamIndicator);
+      this.mesh.add(teamStripe);
     }
+
+    // Create a dummy team indicator as placeholder (since we removed the ball)
+    // This avoids linter errors with the teamIndicator property
+    this.teamIndicator = new THREE.Mesh(
+      new THREE.BoxGeometry(0.01, 0.01, 0.01),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
 
     // Add eyes to show which direction player is facing
     this.eyes = new THREE.Group();
 
-    const eyeGeometry = new THREE.SphereGeometry(0.1, 16, 16);
-    const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+    // White eyeballs with black pupils for funnier look
+    const eyeGeometry = new THREE.SphereGeometry(0.12, 16, 16);
+    const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
     const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    leftEye.position.set(-0.2, this.playerHeight - 0.3, 0.5);
+    leftEye.position.set(-0.2, this.playerHeight - 0.3, -0.5); // Move eyes to front (-Z is front)
 
     const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-    rightEye.position.set(0.2, this.playerHeight - 0.3, 0.5);
+    rightEye.position.set(0.2, this.playerHeight - 0.3, -0.5); // Move eyes to front (-Z is front)
+
+    // Add black pupils inside the white eyes
+    const pupilGeometry = new THREE.SphereGeometry(0.07, 16, 16); // Larger pupils
+    const pupilMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x000000,
+      transparent: false,
+      opacity: 1.0 
+    }); // Use basic material for solid black with no lighting effects
+
+    const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+    leftPupil.position.set(0, 0, -0.1); // Position further out on the front of the eye
+    leftEye.add(leftPupil);
+
+    const rightPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
+    rightPupil.position.set(0, 0, -0.1); // Position further out on the front of the eye
+    rightEye.add(rightPupil);
 
     this.eyes.add(leftEye);
     this.eyes.add(rightEye);
 
-    // Only add eyes for non-local players to avoid view obstruction
+    // Add helmet (cube on top of head)
+    const helmetGeometry = new THREE.BoxGeometry(0.8, 0.3, 0.8);
+    const helmetMaterial = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      metalness: 0.7,
+      roughness: 0.3,
+    });
+    
+    const helmet = new THREE.Mesh(helmetGeometry, helmetMaterial);
+    helmet.position.set(0, this.playerHeight + 0.15, 0); // Position above head
+    this.eyes.add(helmet);
+
+    // Only add eyes and helmet for non-local players to avoid view obstruction
     if (!isLocalPlayer) {
       this.mesh.add(this.eyes);
     }
@@ -117,9 +152,6 @@ export class Player {
 
     // Initialize weapons
     this.initializeWeapons();
-
-    // Create weapon mesh
-    this.createWeaponMesh();
 
     // Update visibility based on dead status
     this.updateVisibility();
@@ -138,102 +170,13 @@ export class Player {
   }
 
   /**
-   * Create a visual representation of the weapon
-   */
-  private createWeaponMesh(): void {
-    if (this.isLocalPlayer) {
-      // For local player, create a first-person weapon model
-      const weaponGroup = new THREE.Group();
-
-      // Simple gun model
-      const gunBody = new THREE.Mesh(
-        new THREE.BoxGeometry(0.1, 0.1, 0.4),
-        new THREE.MeshStandardMaterial({ color: 0x333333 })
-      );
-      gunBody.position.set(0, -0.05, 0.2);
-
-      const gunBarrel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8),
-        new THREE.MeshStandardMaterial({ color: 0x555555 })
-      );
-      gunBarrel.rotation.x = Math.PI / 2;
-      gunBarrel.position.set(0, 0, 0.4);
-
-      const paintballChamber = new THREE.Mesh(
-        new THREE.SphereGeometry(0.1, 16, 8),
-        new THREE.MeshStandardMaterial({
-          color: 0x888888,
-          transparent: true,
-          opacity: 0.8,
-        })
-      );
-      paintballChamber.position.set(0, 0.1, 0.2);
-
-      // Add parts to weapon group
-      weaponGroup.add(gunBody);
-      weaponGroup.add(gunBarrel);
-      weaponGroup.add(paintballChamber);
-
-      // Position the weapon in the player's view
-      weaponGroup.position.set(
-        0.3, // Right side
-        -0.2, // Below center
-        -0.5 // In front
-      );
-
-      this.weaponMesh = weaponGroup;
-
-      // If camera is attached, add weapon to camera
-      if (this.camera) {
-        this.camera.add(this.weaponMesh);
-      }
-    } else {
-      // For other players, create a third-person weapon model attached to their hand
-      const weaponGroup = new THREE.Group();
-
-      // Simple gun
-      const gunBody = new THREE.Mesh(
-        new THREE.BoxGeometry(0.1, 0.1, 0.3),
-        new THREE.MeshStandardMaterial({ color: 0x333333 })
-      );
-
-      const gunBarrel = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.02, 0.02, 0.3, 8),
-        new THREE.MeshStandardMaterial({ color: 0x555555 })
-      );
-      gunBarrel.rotation.x = Math.PI / 2;
-      gunBarrel.position.set(0, 0, 0.2);
-
-      weaponGroup.add(gunBody);
-      weaponGroup.add(gunBarrel);
-
-      // Position at player's hand
-      weaponGroup.position.set(0.5, this.playerHeight - 0.5, 0.3);
-      weaponGroup.rotation.y = -Math.PI / 4; // Angle the gun forward
-
-      this.weaponMesh = weaponGroup;
-      this.mesh.add(this.weaponMesh);
-    }
-  }
-
-  /**
    * Update player visibility based on dead status
    */
   private updateVisibility(): void {
     if (this.isDead) {
       this.mesh.visible = false;
-
-      // Also hide weapon if local player
-      if (this.isLocalPlayer && this.camera && this.weaponMesh) {
-        this.weaponMesh.visible = false;
-      }
     } else {
       this.mesh.visible = true;
-
-      // Show weapon if local player
-      if (this.isLocalPlayer && this.camera && this.weaponMesh) {
-        this.weaponMesh.visible = true;
-      }
     }
   }
 
@@ -567,10 +510,8 @@ export class Player {
       this.camera.rotation.z = 0;
     }
 
-    // Update weapon position if present
-    if (this.weaponMesh) {
-      this.positionWeaponMesh();
-    }
+    // Weapon mesh has been removed
+    // No longer need to update weapon position
   }
 
   /**
@@ -836,88 +777,50 @@ export class Player {
   }
 
   /**
-   * Fire the player's weapon
-   * @returns Object with shot data if successful, null if couldn't shoot
+   * Fire a shot
+   * @returns Position and direction of the shot or null if couldn't shoot
    */
   public shoot(): { position: THREE.Vector3; direction: THREE.Vector3 } | null {
-    // Skip if dead or weapon not available
-    if (this.isDead || !this.currentWeapon) {
+    // Skip if player is dead
+    if (this.isDead) {
       return null;
     }
 
-    // Check fire rate
+    // Check if weapon can fire (using the fire rate)
     const now = Date.now();
-    if (
-      now - this.currentWeapon.lastFired <
-      1000 / this.currentWeapon.fireRate
-    ) {
+    if (now - this.currentWeapon.lastFired < 1000 / this.currentWeapon.fireRate) {
       return null; // Can't fire yet
     }
 
     // Update last fired time
     this.currentWeapon.lastFired = now;
 
-    // Calculate shot position (from camera or player position)
+    // Calculate shot position and direction
     const shotPosition = new THREE.Vector3();
-    if (this.isLocalPlayer && this.camera) {
-      // For local player, use camera position
-      this.camera.getWorldPosition(shotPosition);
-    } else {
-      // For other players, use player position plus height
-      shotPosition
-        .copy(this.position)
-        .add(new THREE.Vector3(0, this.playerHeight - 0.3, 0));
-    }
-
-    // Calculate shot direction
     const shotDirection = new THREE.Vector3(0, 0, -1); // Forward
 
-    // Apply rotation
-    const rotationMatrix = new THREE.Matrix4();
-    rotationMatrix.makeRotationY(this.rotation.y);
-    rotationMatrix.multiply(new THREE.Matrix4().makeRotationX(this.rotation.x));
-    shotDirection.applyMatrix4(rotationMatrix);
+    // If we're the local player, use camera for shot origin
+    if (this.isLocalPlayer && this.camera) {
+      // Get position slightly in front of camera
+      shotPosition.copy(this.camera.position);
+      
+      // Get forward direction from camera
+      this.camera.getWorldDirection(shotDirection);
+    } else {
+      // For non-local players, use player position + height
+      shotPosition.copy(this.position);
+      shotPosition.y += this.playerHeight * 0.8; // Eye level
+      
+      // Calculate direction based on rotation
+      shotDirection.set(0, 0, -1);
+      shotDirection.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.rotation.x);
+      shotDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
+    }
 
+    // Return shot data for the game to create projectile
     return {
       position: shotPosition,
       direction: shotDirection,
     };
-  }
-
-  /**
-   * Position the weapon mesh relative to the player
-   */
-  private positionWeaponMesh(): void {
-    if (!this.weaponMesh || !this.camera) return;
-
-    if (this.isLocalPlayer) {
-      // For local player, position weapon relative to camera
-      // Remove from scene if it's there
-      if (this.weaponMesh.parent !== this.camera) {
-        if (this.weaponMesh.parent) {
-          this.weaponMesh.parent.remove(this.weaponMesh);
-        }
-        this.camera.add(this.weaponMesh);
-      }
-
-      // Position in front of camera
-      this.weaponMesh.position.set(0.3, -0.3, -0.5); // Right, down, forward
-      this.weaponMesh.rotation.set(0, 0, 0);
-    } else {
-      // For other players, position weapon in hand
-      // Remove from camera if it's there
-      if (this.weaponMesh.parent !== this.mesh) {
-        if (this.weaponMesh.parent) {
-          this.weaponMesh.parent.remove(this.weaponMesh);
-        }
-        this.mesh.add(this.weaponMesh);
-      }
-
-      // Position in hand
-      const offset = new THREE.Vector3(0.3, -0.2, -0.5); // Right, down, forward
-      offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
-      this.weaponMesh.position.copy(offset);
-      this.weaponMesh.rotation.y = 0; // Relative to player
-    }
   }
 }
