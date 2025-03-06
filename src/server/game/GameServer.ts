@@ -372,8 +372,13 @@ export class GameServer {
    */
   public initialize(): void {
     this.io.on("connection", (socket: Socket) => {
+      // Añadir diagnóstico para la conexión
+      console.log(`[DIAGNOSIS] Client ${socket.id} connecting to namespace ${socket.nsp.name}`);
+      
       socket.on(SocketEvents.JOIN, () => {
         console.log(`Player connected: ${socket.id}`);
+        console.log(`[DIAGNOSIS] JOIN event received from ${socket.id}, namespaceName: ${socket.nsp.name}`);
+        console.log(`[DIAGNOSIS] Current players count: ${this.players.size}`);
 
         // Assign player to a team (alternating between teams to keep them balanced)
         const teamId = this.assignTeam();
@@ -387,6 +392,8 @@ export class GameServer {
         const spawnPosition = teamExit
           ? { ...teamExit.position }
           : { x: 0, y: 0, z: 0 }; // Fallback if no exit found
+        
+        console.log(`[DIAGNOSIS] Spawn position for player ${socket.id}: ${JSON.stringify(spawnPosition)}`);
 
         // Create a new player
         const player: PlayerState = {
@@ -405,11 +412,16 @@ export class GameServer {
         this.broadcastGameState();
 
         // Broadcast to other players that a new player has joined
-        this.io.emit(SocketEvents.PLAYER_JOINED, player);
+        socket.broadcast.emit(SocketEvents.PLAYER_JOINED, player);
+
         // Send the current game to all players and the new one
-        this.io.emit(SocketEvents.GAME_STATE, this.gameState);
+        console.log(`[DIAGNOSIS] Sending initial game state to player ${socket.id} - Player count: ${this.gameState.players.length}`);
+        socket.broadcast.emit(SocketEvents.GAME_STATE, this.gameState);
+        socket.emit(SocketEvents.GAME_STATE, this.gameState);
+
         // Resend map data to all players
-        this.io.emit(SocketEvents.MAP_DATA, this.mapData);
+        socket.broadcast.emit(SocketEvents.MAP_DATA, this.mapData);
+        socket.emit(SocketEvents.MAP_DATA, this.mapData);
 
       });
 
@@ -476,7 +488,9 @@ export class GameServer {
       // Handle disconnection
       socket.on("disconnect", () => {
         console.log(`Player disconnected: ${socket.id}`);
-
+        console.log(`[DIAGNOSIS] Disconnect event for ${socket.id}, namespaceName: ${socket.nsp.name}`);
+        console.log(`[DIAGNOSIS] Players before disconnect: ${this.players.size}`);
+        
         const player = this.players.get(socket.id);
 
         // Clear any respawn timeout
@@ -613,12 +627,14 @@ export class GameServer {
   }
 
   /**
-   * Update the game state and broadcast to all clients
+   * Broadcast current game state to all connected clients
    * TODO: REVIEW IF THIS IS REALLY NEEDED
    */
   private broadcastGameState(): void {
+    // Log diagnostic information before updating
+    console.log(`[DIAGNOSIS] Broadcasting game state - Players map size: ${this.players.size}`);
+    
     // Update hasFlag property for all players based on flagCarrier
-
     this.gameState.players = Array.from(this.players.values());
 
     // Set the game over state
@@ -627,6 +643,13 @@ export class GameServer {
     // Convert null to undefined for GameState properties that expect number | undefined
     this.gameState.winningTeam =
       this.winningTeam === null ? undefined : this.winningTeam;
+
+    // Log the state that will be sent
+    console.log(`[DIAGNOSIS] Game state to broadcast - Player count: ${this.gameState.players.length}`);
+    if (this.gameState.players.length === 0) {
+      console.warn(`[DIAGNOSIS] WARNING: Empty players array in game state!`);
+      console.log(`[DIAGNOSIS] Players map keys: ${Array.from(this.players.keys()).join(', ')}`);
+    }
 
     // Broadcast updated game state to all clients
     this.io.emit(SocketEvents.GAME_STATE, this.gameState);

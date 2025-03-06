@@ -49,6 +49,12 @@ app.get("/games", (req, res) => {
 
 app.get("/:id", (req, res) => {
   // Only add the game path if it doesn't already exist
+  console.log(`[DIAGNOSIS] Request for game /${req.params.id}`);
+  console.log(`[DIAGNOSIS] Existing gameServers: ${Array.from(gameServers.keys()).join(", ")}`);
+  
+  // Obtener namespaces disponibles en Socket.IO
+  const socketNamespaces = Array.from(io._nsps.keys()).join(", ");
+  console.log(`[DIAGNOSIS] Existing Socket.IO namespaces: ${socketNamespaces}`);
 
   if (!gameServers.has(req.params.id)) {
     const namespace = io.of(`/${req.params.id}`);
@@ -56,6 +62,9 @@ app.get("/:id", (req, res) => {
     gameServer.initialize();
     gameServers.set(req.params.id, gameServer);
     console.log(`New server created at /${req.params.id}`);
+    console.log(`[DIAGNOSIS] After creation - gameServers: ${Array.from(gameServers.keys()).join(", ")}`);
+  } else {
+    console.log(`[DIAGNOSIS] Using existing server for /${req.params.id}`);
   }
   
   res.sendFile(path.join(__dirname, "../public/index.html"));
