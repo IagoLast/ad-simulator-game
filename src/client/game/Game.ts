@@ -74,6 +74,8 @@ export class Game {
 
     // Initialize socket connection with proper Socket.IO configuration for Docker
     this.socket = io(namespace, {
+      // Forcing new connection to avoid issues with the namespace
+      forceNew: true,
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 5,
