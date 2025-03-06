@@ -685,7 +685,7 @@ export class MapGenerator {
     });
 
     // Add billboards at strategic locations
-    const billboardCount = 25; // Increased number of billboards
+    const billboardCount = 100; // Increased number of billboards
     let placedBillboards = 0;
     let totalAttempts = 0;
 
