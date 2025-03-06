@@ -405,15 +405,12 @@ export class GameServer {
         this.broadcastGameState();
 
         // Broadcast to other players that a new player has joined
-        socket.broadcast.emit(SocketEvents.PLAYER_JOINED, player);
-
+        this.io.emit(SocketEvents.PLAYER_JOINED, player);
         // Send the current game to all players and the new one
-        socket.broadcast.emit(SocketEvents.GAME_STATE, this.gameState);
-        socket.emit(SocketEvents.GAME_STATE, this.gameState);
-
+        this.io.emit(SocketEvents.GAME_STATE, this.gameState);
         // Resend map data to all players
-        socket.broadcast.emit(SocketEvents.MAP_DATA, this.mapData);
-        socket.emit(SocketEvents.MAP_DATA, this.mapData);
+        this.io.emit(SocketEvents.MAP_DATA, this.mapData);
+
       });
 
       // Handle player movement
