@@ -88,6 +88,7 @@ class Projectile {
  * GameServer handles all the game logic and player connections
  */
 export class GameServer {
+  private instanceId: string;
   private io: Server | Namespace;
   private gameState: GameState;
   private players: Map<string, PlayerState>;
@@ -113,6 +114,9 @@ export class GameServer {
    * @param io Socket.io server or namespace instance
    */
   constructor(io: Server | Namespace) {
+    this.instanceId = Math.random().toString(36).substring(2, 10);
+    console.log(`[GAMESERVER:${this.instanceId}] Creating new GameServer for namespace: ${(io as Namespace).name || "/"}`);
+    
     this.io = io;
     this.players = new Map();
 
@@ -139,6 +143,8 @@ export class GameServer {
 
     // Start physics update loop
     setInterval(this.updatePhysics.bind(this), 16); // ~60 updates per second
+    
+    console.log(`[GAMESERVER:${this.instanceId}] GameServer initialized, physics loop started`);
   }
 
   /**
@@ -371,18 +377,20 @@ export class GameServer {
    * Initialize the server and set up event handlers
    */
   public initialize(): void {
+    console.log(`[GAMESERVER:${this.instanceId}] Initializing Socket.IO event handlers`);
+    
     this.io.on("connection", (socket: Socket) => {
       // Añadir diagnóstico para la conexión
-      console.log(`[DIAGNOSIS] Client ${socket.id} connecting to namespace ${socket.nsp.name}`);
+      console.log(`[GAMESERVER:${this.instanceId}] Client ${socket.id} connecting to namespace ${socket.nsp.name}`);
       
       socket.on(SocketEvents.JOIN, () => {
-        console.log(`Player connected: ${socket.id}`);
-        console.log(`[DIAGNOSIS] JOIN event received from ${socket.id}, namespaceName: ${socket.nsp.name}`);
-        console.log(`[DIAGNOSIS] Current players count: ${this.players.size}`);
+        console.log(`[GAMESERVER:${this.instanceId}] Player connected: ${socket.id}`);
+        console.log(`[GAMESERVER:${this.instanceId}] JOIN event received from ${socket.id}, namespaceName: ${socket.nsp.name}`);
+        console.log(`[GAMESERVER:${this.instanceId}] Current players count: ${this.players.size}`);
 
         // Assign player to a team (alternating between teams to keep them balanced)
         const teamId = this.assignTeam();
-        console.log(`Assigning player ${socket.id} to team ${teamId}`);
+        console.log(`[GAMESERVER:${this.instanceId}] Assigning player ${socket.id} to team ${teamId}`);
 
         // Get team color
         const color = this.teamColors.get(teamId) || "#FFFFFF";
@@ -393,7 +401,7 @@ export class GameServer {
           ? { ...teamExit.position }
           : { x: 0, y: 0, z: 0 }; // Fallback if no exit found
         
-        console.log(`[DIAGNOSIS] Spawn position for player ${socket.id}: ${JSON.stringify(spawnPosition)}`);
+        console.log(`[GAMESERVER:${this.instanceId}] Spawn position for player ${socket.id}: ${JSON.stringify(spawnPosition)}`);
 
         // Create a new player
         const player: PlayerState = {
@@ -415,7 +423,7 @@ export class GameServer {
         socket.broadcast.emit(SocketEvents.PLAYER_JOINED, player);
 
         // Send the current game to all players and the new one
-        console.log(`[DIAGNOSIS] Sending initial game state to player ${socket.id} - Player count: ${this.gameState.players.length}`);
+        console.log(`[GAMESERVER:${this.instanceId}] Sending initial game state to player ${socket.id} - Player count: ${this.gameState.players.length}`);
         socket.broadcast.emit(SocketEvents.GAME_STATE, this.gameState);
         socket.emit(SocketEvents.GAME_STATE, this.gameState);
 
@@ -487,9 +495,9 @@ export class GameServer {
 
       // Handle disconnection
       socket.on("disconnect", () => {
-        console.log(`Player disconnected: ${socket.id}`);
-        console.log(`[DIAGNOSIS] Disconnect event for ${socket.id}, namespaceName: ${socket.nsp.name}`);
-        console.log(`[DIAGNOSIS] Players before disconnect: ${this.players.size}`);
+        console.log(`[GAMESERVER:${this.instanceId}] Player disconnected: ${socket.id}`);
+        console.log(`[GAMESERVER:${this.instanceId}] Disconnect event for ${socket.id}, namespaceName: ${socket.nsp.name}`);
+        console.log(`[GAMESERVER:${this.instanceId}] Players before disconnect: ${this.players.size}`);
         
         const player = this.players.get(socket.id);
 
@@ -530,6 +538,9 @@ export class GameServer {
           // Notify other players about the disconnection
           this.io.emit(SocketEvents.PLAYER_LEFT, socket.id);
         }
+
+        // Log after cleanup
+        console.log(`[GAMESERVER:${this.instanceId}] Players after disconnect: ${this.players.size}`);
       });
     });
   }
@@ -628,11 +639,10 @@ export class GameServer {
 
   /**
    * Broadcast current game state to all connected clients
-   * TODO: REVIEW IF THIS IS REALLY NEEDED
    */
   private broadcastGameState(): void {
     // Log diagnostic information before updating
-    console.log(`[DIAGNOSIS] Broadcasting game state - Players map size: ${this.players.size}`);
+    console.log(`[GAMESERVER:${this.instanceId}] Broadcasting game state - Players map size: ${this.players.size}`);
     
     // Update hasFlag property for all players based on flagCarrier
     this.gameState.players = Array.from(this.players.values());
@@ -645,10 +655,10 @@ export class GameServer {
       this.winningTeam === null ? undefined : this.winningTeam;
 
     // Log the state that will be sent
-    console.log(`[DIAGNOSIS] Game state to broadcast - Player count: ${this.gameState.players.length}`);
+    console.log(`[GAMESERVER:${this.instanceId}] Game state to broadcast - Player count: ${this.gameState.players.length}`);
     if (this.gameState.players.length === 0) {
-      console.warn(`[DIAGNOSIS] WARNING: Empty players array in game state!`);
-      console.log(`[DIAGNOSIS] Players map keys: ${Array.from(this.players.keys()).join(', ')}`);
+      console.warn(`[GAMESERVER:${this.instanceId}] WARNING: Empty players array in game state!`);
+      console.log(`[GAMESERVER:${this.instanceId}] Players map keys: ${Array.from(this.players.keys()).join(', ')}`);
     }
 
     // Broadcast updated game state to all clients
