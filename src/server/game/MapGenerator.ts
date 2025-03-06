@@ -59,7 +59,7 @@ export class MapGenerator {
     this.addOuterWalls(entities);
 
     // Add some random inner walls to create a maze-like structure
-    this.addInnerWalls(entities);
+    // this.addInnerWalls(entities);
 
     // Add exits for both teams
     this.addExits(entities);
@@ -572,24 +572,29 @@ export class MapGenerator {
 
   /**
    * Add team exits to the map
+   * This is also referred as "BASE".
    * @param entities Array of map entities to add exits to
    */
   private addExits(entities: MapEntity[]): void {
-    // Team 1 exit (near west wall) - Larger size
+    /**
+     * Team 1 positioned near west wall.
+     */
     entities.push({
       type: EntityType.EXIT,
       position: { x: -this.width / 2 + 8, y: 0.1, z: -this.height / 2 + 8 },
       dimensions: { width: 4, height: 0.2, depth: 4 },
       teamId: 1,
-    } as Exit);
+    });
 
-    // Team 2 exit (near east wall) - Larger size
+    /**
+     * Team 2 positioned near east wall.
+     */
     entities.push({
       type: EntityType.EXIT,
       position: { x: this.width / 2 - 8, y: 0.1, z: this.height / 2 - 8 },
       dimensions: { width: 4, height: 0.2, depth: 4 },
       teamId: 2,
-    } as Exit);
+    });
   }
 
   /**
@@ -773,7 +778,7 @@ export class MapGenerator {
         dimensions: { width, height, depth },
         rotation: { x: 0, y: rotationY, z: 0 },
         text: text,
-      } as Billboard;
+      };
 
       // Add the billboard to entities
       entities.push(billboard);
