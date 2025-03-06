@@ -99,7 +99,6 @@ export class GameServer {
     number,
     { position: { x: number; y: number; z: number } }
   > = new Map();
-  private flagCarrier: string | null = null;
   private gameOver: boolean = false;
   private winningTeam: number | null = null;
   private restartTimeout: NodeJS.Timeout | null = null;
@@ -136,7 +135,7 @@ export class GameServer {
     this.teamCounts.set(2, 0);
 
     // Find exit positions for spawning
-    this.findTeamExits();
+    this.setTeamExists();
 
     // Start physics update loop
     setInterval(this.updatePhysics.bind(this), 16); // ~60 updates per second
@@ -145,7 +144,7 @@ export class GameServer {
   /**
    * Find and store exit positions for team spawns
    */
-  private findTeamExits(): void {
+  private setTeamExists(): void {
     const entities = this.mapData.entities;
 
     for (const entity of entities) {
@@ -295,23 +294,22 @@ export class GameServer {
     const player = this.players.get(playerId);
 
     if (!player) {
+      console.error("PLAYER_DIED RECEIVED FOR NON-EXISTING PLAYER");
       return;
+    }
+
+    if (player.hasFlag) {
+      // Drop flag at player's position
+      this.handleFlagDrop(playerId, player.position);
     }
 
     // Mark player as dead
     player.isDead = true;
+    player.hasFlag = false;
+    player.health = 0;
 
     // Broadcast death event
-    this.io.emit(SocketEvents.PLAYER_DIED, {
-      playerId,
-      killerId,
-    });
-
-    // Drop flag if carrying
-    if (this.flagCarrier === playerId) {
-      // Drop flag at player's position
-      this.handleFlagDrop(playerId, player.position);
-    }
+    this.io.emit(SocketEvents.PLAYER_DIED, { playerId, killerId });
 
     // Set respawn time (5 seconds from now)
     const respawnTime = Date.now() + 5000;
@@ -326,7 +324,7 @@ export class GameServer {
     this.respawnTimeouts.set(playerId, respawnTimeout);
 
     // Update game state
-    this.updateGameState();
+    this.broadcastGameState();
   }
 
   /**
@@ -334,12 +332,14 @@ export class GameServer {
    */
   private respawnPlayer(playerId: string): void {
     const player = this.players.get(playerId);
+
     if (!player) {
       return;
     }
 
     // Clear any existing timeout
     const timeout = this.respawnTimeouts.get(playerId);
+
     if (timeout) {
       clearTimeout(timeout);
       this.respawnTimeouts.delete(playerId);
@@ -358,7 +358,7 @@ export class GameServer {
     }
 
     // Update game state
-    this.updateGameState();
+    this.broadcastGameState();
 
     // Broadcast respawn event
     this.io.emit(SocketEvents.PLAYER_RESPAWNED, {
@@ -402,7 +402,7 @@ export class GameServer {
 
         // Add player to game state
         this.players.set(socket.id, player);
-        this.updateGameState();
+        this.broadcastGameState();
 
         // Broadcast to other players that a new player has joined
         socket.broadcast.emit(SocketEvents.PLAYER_JOINED, player);
@@ -484,6 +484,7 @@ export class GameServer {
 
         // Clear any respawn timeout
         const timeout = this.respawnTimeouts.get(socket.id);
+
         if (timeout) {
           clearTimeout(timeout);
           this.respawnTimeouts.delete(socket.id);
@@ -494,9 +495,10 @@ export class GameServer {
           const teamCount = this.teamCounts.get(player.teamId) || 0;
           this.teamCounts.set(player.teamId, Math.max(0, teamCount - 1));
 
+          /**
+           * Drop the flag at the player's position.
+           */
           if (player.hasFlag) {
-            this.flagCarrier = null;
-            
             this.io.emit(SocketEvents.FLAG_DROPPED, {
               playerId: socket.id,
               position: player.position,
@@ -507,22 +509,16 @@ export class GameServer {
               position: player.position,
             });
 
-            this.updateGameState();
+            this.broadcastGameState();
           }
 
           // Remove player
           this.players.delete(socket.id);
-          this.updateGameState();
+          this.broadcastGameState();
 
           // Notify other players about the disconnection
           this.io.emit(SocketEvents.PLAYER_LEFT, socket.id);
         }
-      });
-
-      // Add handler for request_map_data event
-      socket.on("request_map_data", () => {
-        console.log(`Player ${socket.id} requested map data refresh`);
-        socket.emit(SocketEvents.MAP_DATA, this.mapData);
       });
     });
   }
@@ -554,7 +550,6 @@ export class GameServer {
     // Reset game state
     this.gameOver = false;
     this.winningTeam = null;
-    this.flagCarrier = null;
 
     // Clear all projectiles
     this.projectiles = [];
@@ -563,6 +558,7 @@ export class GameServer {
     for (const [socketId, player] of this.players.entries()) {
       // Cancel any respawn timers
       const timeout = this.respawnTimeouts.get(socketId);
+      
       if (timeout) {
         clearTimeout(timeout);
         this.respawnTimeouts.delete(socketId);
@@ -583,10 +579,10 @@ export class GameServer {
 
     // Update game state with new map
     this.gameState.map = this.mapData;
-    this.updateGameState();
+    this.broadcastGameState();
 
     // Find new team exits
-    this.findTeamExits();
+    this.setTeamExists();
 
     // Notify all clients of game restart
     this.io.emit(SocketEvents.GAME_RESTART);
@@ -621,18 +617,12 @@ export class GameServer {
 
   /**
    * Update the game state and broadcast to all clients
+   * TODO: REVIEW IF THIS IS REALLY NEEDED
    */
-  private updateGameState(): void {
+  private broadcastGameState(): void {
     // Update hasFlag property for all players based on flagCarrier
-    this.players.forEach((player) => {
-      player.hasFlag = player.id === this.flagCarrier;
-    });
 
     this.gameState.players = Array.from(this.players.values());
-
-    // Convert null to undefined for GameState properties that expect string | undefined
-    this.gameState.flagCarrier =
-      this.flagCarrier === null ? undefined : this.flagCarrier;
 
     // Set the game over state
     this.gameState.gameOver = this.gameOver;
@@ -653,33 +643,23 @@ export class GameServer {
     position: { x: number; y: number; z: number }
   ): void {
     const player = this.players.get(playerId);
-    if (!player) return;
-
-    // Update flag carrier status
-    this.flagCarrier = null;
-    player.hasFlag = false;
-
-    // Update entities to add flag back to map at player's position
-    let flagExists = false;
-    for (const entity of this.mapData.entities) {
-      if (entity.type === EntityType.FLAG) {
-        // Update existing flag position
-        entity.position = { ...position };
-        flagExists = true;
-        break;
-      }
+    if (!player) {
+      return;
     }
 
-    // If no flag exists in the map data (shouldn't happen), add it
-    if (!flagExists) {
-      this.mapData.entities.push({
-        type: EntityType.FLAG,
-        position: { ...position },
-      });
-    }
+    // Remove all flag from map entities
+    this.mapData.entities = this.mapData.entities.filter(
+      (entity) => entity.type !== EntityType.FLAG
+    );
+
+    // Add flag to map entities at the player's position
+    this.mapData.entities.push({
+      type: EntityType.FLAG,
+      position,
+    });
 
     // Update game state
-    this.updateGameState();
+    this.broadcastGameState();
 
     // Broadcast flag dropped to all players
     this.io.emit(SocketEvents.FLAG_DROPPED, {
@@ -694,7 +674,6 @@ export class GameServer {
     );
 
     if (!flagEntity) {
-      console.error("Flag entity not found in map data");
       return;
     }
 
@@ -706,19 +685,34 @@ export class GameServer {
     const dz = player.position.z - flagPosition.z;
     const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-    if (distance < this.FLAG_CAPTURE_RADIUS) {
-      this.flagCarrier = player.id;
-      player.hasFlag = true;
-      this.io.emit(SocketEvents.FLAG_CAPTURED, {
-        playerId: player.id,
-        teamId: player.teamId,
-      });
-      // Remove flag entity from the map
-      this.mapData.entities = this.mapData.entities.filter(
-        (entity) => entity.type !== EntityType.FLAG
-      );
-      this.updateGameState();
+    /**
+     * If flayer is not near the flag just ignore.
+     */
+    if (distance >= this.FLAG_CAPTURE_RADIUS) {
+      return;
     }
+
+    /**
+     * Otherwise the player has the flag.
+     */
+    player.hasFlag = true;
+    /**
+     * Broadcast the flag captured event to all players.
+     */
+    this.io.emit(SocketEvents.FLAG_CAPTURED, {
+      playerId: player.id,
+      teamId: player.teamId,
+    });
+    /**
+     * Remove the flag from the map.
+     */
+    this.mapData.entities = this.mapData.entities.filter(
+      (entity) => entity.type !== EntityType.FLAG
+    );
+    /**
+     * Update the game state.
+     */
+    this.broadcastGameState();
   }
 
   private _checkIfFlagIsReturnedToBase(player: PlayerState): void {
@@ -730,7 +724,7 @@ export class GameServer {
     }
 
     /**
-     * Check if the player carring the flag is at his base.
+     * Check if the player carrying the flag is at his base.
      */
     const teamExit = this.teamExits.get(player.teamId)!;
 
@@ -740,14 +734,16 @@ export class GameServer {
     const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
     if (distance < this.FLAG_CAPTURE_RADIUS) {
-      this.flagCarrier = null;
       player.hasFlag = false;
 
       this.io.emit(SocketEvents.FLAG_RETURNED, {
         playerId: player.id,
         teamId: player.teamId,
-      });
+      }); 
 
+      /**
+       * TODO: WE DON'T NEED TO END THE GAME WHEN A FLAG IS RETURNED.
+       */
       this.io.emit(SocketEvents.GAME_OVER, {
         winningTeam: player.teamId,
       });

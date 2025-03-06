@@ -7,6 +7,8 @@ import { PaintballGun } from "./weapons/PaintballGun";
  */
 export class Player {
   public mesh: THREE.Group;
+  public hasFlag: boolean = false;
+
   private id: string;
   private isLocalPlayer: boolean;
   private moveSpeed: number;
@@ -25,7 +27,6 @@ export class Player {
   private teamId: number;
   private teamIndicator: THREE.Mesh;
   private flag: THREE.Group | null = null; // Reference to flag object when carrying
-  private hasFlag: boolean = false;
 
   // Combat properties
   private health: number;
@@ -76,16 +77,20 @@ export class Player {
     this.mesh.add(this.playerBody);
 
     // Add team color stripe to the body
-    const stripeGeometry = new THREE.BoxGeometry(1.01, this.playerHeight / 4, 1.01);
+    const stripeGeometry = new THREE.BoxGeometry(
+      1.01,
+      this.playerHeight / 4,
+      1.01
+    );
     const stripeMaterial = new THREE.MeshStandardMaterial({
       color: playerState.color,
       emissive: playerState.color,
       emissiveIntensity: 0.5,
     });
-    
+
     const teamStripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
     teamStripe.position.y = this.playerHeight / 2; // Place in middle of body
-    
+
     // Only add team color stripe for non-local players to avoid view obstruction
     if (!isLocalPlayer) {
       this.mesh.add(teamStripe);
@@ -113,10 +118,10 @@ export class Player {
 
     // Add black pupils inside the white eyes
     const pupilGeometry = new THREE.SphereGeometry(0.07, 16, 16); // Larger pupils
-    const pupilMaterial = new THREE.MeshBasicMaterial({ 
+    const pupilMaterial = new THREE.MeshBasicMaterial({
       color: 0x000000,
       transparent: false,
-      opacity: 1.0 
+      opacity: 1.0,
     }); // Use basic material for solid black with no lighting effects
 
     const leftPupil = new THREE.Mesh(pupilGeometry, pupilMaterial);
@@ -137,7 +142,7 @@ export class Player {
       metalness: 0.7,
       roughness: 0.3,
     });
-    
+
     const helmet = new THREE.Mesh(helmetGeometry, helmetMaterial);
     helmet.position.set(0, this.playerHeight + 0.15, 0); // Position above head
     this.eyes.add(helmet);
@@ -343,7 +348,9 @@ export class Player {
     // Check for significant rotation changes
     const rotationXDiff = Math.abs(this.rotation.x - this.lastSentRotation.x);
     const rotationYDiff = Math.abs(this.rotation.y - this.lastSentRotation.y);
-    const rotationChanged = rotationXDiff > this.rotationThreshold || rotationYDiff > this.rotationThreshold;
+    const rotationChanged =
+      rotationXDiff > this.rotationThreshold ||
+      rotationYDiff > this.rotationThreshold;
 
     // Update last sent position if changed significantly
     if (positionChanged) {
@@ -737,24 +744,14 @@ export class Player {
   /**
    * Handle player death
    */
-  private die(): void {
+  public die(): void {
     // Set dead state
     this.isDead = true;
-
-    // Remove flag if carrying
-    if (this.hasFlag) {
-      this.dropFlag();
-    }
+    this.hasFlag = false;
+    this.health = 0;
 
     // Hide player object
     this.updateVisibility();
-  }
-
-  /**
-   * Drop the flag at the current position
-   */
-  private dropFlag(): void {
-    this.hasFlag = false;
   }
 
   /**
@@ -788,7 +785,10 @@ export class Player {
 
     // Check if weapon can fire (using the fire rate)
     const now = Date.now();
-    if (now - this.currentWeapon.lastFired < 1000 / this.currentWeapon.fireRate) {
+    if (
+      now - this.currentWeapon.lastFired <
+      1000 / this.currentWeapon.fireRate
+    ) {
       return null; // Can't fire yet
     }
 
@@ -803,14 +803,14 @@ export class Player {
     if (this.isLocalPlayer && this.camera) {
       // Get position slightly in front of camera
       shotPosition.copy(this.camera.position);
-      
+
       // Get forward direction from camera
       this.camera.getWorldDirection(shotDirection);
     } else {
       // For non-local players, use player position + height
       shotPosition.copy(this.position);
       shotPosition.y += this.playerHeight * 0.8; // Eye level
-      
+
       // Calculate direction based on rotation
       shotDirection.set(0, 0, -1);
       shotDirection.applyAxisAngle(new THREE.Vector3(1, 0, 0), this.rotation.x);

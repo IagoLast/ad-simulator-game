@@ -129,7 +129,6 @@ export interface MapData {
 export interface GameState {
   players: PlayerState[];
   map?: MapData;
-  flagCarrier?: string; // ID of player carrying the flag
   gameOver?: boolean;
   winningTeam?: number;
 }

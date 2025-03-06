@@ -33,8 +33,6 @@ export class Game {
   private lastUpdateTime: number;
   private mapRenderer: MapRenderer;
   private walls: THREE.Object3D[] = [];
-  private flagObject: THREE.Object3D | null = null;
-  private flagCarrier: string | null = null;
   private gameOver: boolean = false;
   private winningTeam: number | null = null;
   private sound: Sound;
@@ -63,9 +61,10 @@ export class Game {
     document.body.appendChild(this.renderer.domElement);
 
     // Check if we're on a mobile device
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
-    );
+    const isMobileDevice =
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      );
 
     // Initialize UI
     this.ui = new UI(isMobileDevice);
@@ -128,51 +127,18 @@ export class Game {
     this.socket.on(SocketEvents.GAME_STATE, (gameState: GameState) => {
       console.info("GAME STATE RECEIVED");
 
-      // Store the previous flag carrier to detect changes
-      const previousFlagCarrier = this.flagCarrier;
-
-      // Update flag carrier from game state
-      this.flagCarrier = gameState.flagCarrier || null;
-
-      // Debug log for all players to check hasFlag status
-      gameState.players.forEach((player) => {});
-
-      // If flag carrier has changed, update player visuals
-      if (previousFlagCarrier !== this.flagCarrier) {
-        // Remove flag from previous carrier if they still exist
-        if (previousFlagCarrier && this.players.has(previousFlagCarrier)) {
-          const prevPlayer = this.players.get(previousFlagCarrier);
-          if (prevPlayer) {
-            prevPlayer.setHasFlag(false);
-          }
-        } else if (
-          previousFlagCarrier &&
-          this.localPlayer &&
-          previousFlagCarrier === this.socket.id
-        ) {
-          this.localPlayer.setHasFlag(false);
-        }
-
-        // Add flag to new carrier
-        if (this.flagCarrier) {
-          if (this.flagCarrier === this.socket.id && this.localPlayer) {
-            this.localPlayer.setHasFlag(true);
-          } else if (this.players.has(this.flagCarrier)) {
-            const newCarrier = this.players.get(this.flagCarrier);
-            if (newCarrier) {
-              newCarrier.setHasFlag(true);
-            }
-          }
-        }
-      }
-
       // Update game over state
       this.gameOver = gameState.gameOver || false;
       this.winningTeam = gameState.winningTeam || null;
+      const flagCarrier = gameState.players.find((p) => p.hasFlag) || null;
 
       // Update UI with the latest game state
       if (this.localPlayer) {
-        this.ui.updateTeamInfo(gameState, this.localPlayer.getId(), this.flagCarrier);
+        this.ui.updateTeamInfo(
+          gameState,
+          this.localPlayer.getId(),
+          flagCarrier?.id || null
+        );
       }
 
       if (this.gameOver && this.winningTeam) {
@@ -278,9 +244,6 @@ export class Game {
 
       // Update the walls list for collision detection
       this.updateWallsList();
-
-      // Get and store reference to the flag object
-      this.flagObject = this.mapRenderer.getFlag();
     });
 
     // Handle flag captured events
@@ -290,24 +253,18 @@ export class Game {
         this.sound.playFlagSound("capture");
         console.info("FLAG_CAPTURED RECEIVED");
         // Update flag carrier status
-        this.flagCarrier = data.playerId;
 
         // Show game message
-        const isLocalPlayer = data.playerId === this.socket.id;
+        const hasLocalPlayerCapturedTheFlag = data.playerId === this.socket.id;
         const teamName = data.teamId === 1 ? "Red Team" : "Blue Team";
         const teamColor = data.teamId === 1 ? "#FF3333" : "#3333FF";
-
-        // First, clear any flag from ALL players to prevent duplication
-        if (this.localPlayer) {
-          this.localPlayer.setHasFlag(false);
-        }
 
         for (const [_d, player] of this.players.entries()) {
           player.setHasFlag(false);
         }
 
         // Then set the flag on the correct player
-        if (isLocalPlayer) {
+        if (hasLocalPlayerCapturedTheFlag) {
           this.showGameMessage(
             "You captured the flag! Return to your base!",
             "gold",
@@ -324,17 +281,10 @@ export class Game {
             teamColor,
             3000
           );
-
-          // Update other player flag status
-          const player = this.players.get(data.playerId);
-          if (player) {
-            player.setHasFlag(true);
-          } 
         }
 
         // Remove flag from scene
         this.mapRenderer.removeFlag();
-        this.flagObject = null;
       }
     );
 
@@ -351,9 +301,6 @@ export class Game {
         teamColor,
         3000
       );
-
-      // Clear flag carrier
-      this.flagCarrier = null;
     });
 
     // Handle game over events
@@ -378,8 +325,6 @@ export class Game {
       // Reset game state
       this.gameOver = false;
       this.winningTeam = null;
-      this.flagCarrier = null;
-      this.flagObject = null;
 
       this.showGameMessage("New game starting!", "white", 3000);
     });
@@ -446,39 +391,24 @@ export class Game {
       SocketEvents.PLAYER_DIED,
       (data: { playerId: string; killerId: string }) => {
         console.info("PLAYER_DIED RECEIVED");
-        // Check if the dead player was carrying the flag
-        const wasCarryingFlag = this.flagCarrier === data.playerId;
 
-        // If it's the local player
-        if (data.playerId === this.socket.id && this.localPlayer) {
-          // Clear flag status if they were the flag carrier
-          if (wasCarryingFlag) {
-            this.localPlayer.setHasFlag(false);
-          }
+        const player = this.players.get(data.playerId);
 
+        if (!player) {
+          console.error("PLAYER_DIED RECEIVED FOR NON-EXISTING PLAYER");
+          return;
+        }
+
+        if (data.playerId === this.socket.id) {
           // Show death message
           this.showGameMessage(
             "You were eliminated! Respawning in 5 seconds...",
             "#FF0000",
             5000
           );
-        } else {
-          // Update other player's state
-          const player = this.players.get(data.playerId);
-          if (player) {
-            // Clear flag status if they were the flag carrier
-            if (wasCarryingFlag) {
-              player.setHasFlag(false);
-            }
-
-            player.takeDamage(999); // Force death state
-          }
         }
 
-        // If the dead player was the flag carrier, update the UI
-        if (wasCarryingFlag) {
-          this.flagCarrier = null;
-        }
+        player.die();
       }
     );
 
@@ -490,18 +420,19 @@ export class Game {
         position: { x: number; y: number; z: number };
       }) => {
         console.info("PLAYER_RESPAWNED RECEIVED");
+        const player = this.players.get(data.playerId);
+
+        if (!player) {
+          console.error("PLAYER_RESPAWNED RECEIVED FOR NON-EXISTING PLAYER");
+          return;
+        }
+
         // If it's the local player
-        if (data.playerId === this.socket.id && this.localPlayer) {
-          this.localPlayer.respawn(data.position);
+        if (data.playerId === this.socket.id) {
           this.showGameMessage("You have respawned!", "#00FF00", 3000);
         }
-        // If it's another player
-        else if (data.playerId !== this.socket.id) {
-          const player = this.players.get(data.playerId);
-          if (player) {
-            player.respawn(data.position);
-          }
-        }
+
+        player.respawn(data.position);
       }
     );
 
@@ -515,26 +446,23 @@ export class Game {
         console.info("FLAG_DROPPED RECEIVED");
         // TODO: ADD SOUND HERE
 
-        // If the flag carrier was the local player, remove flag
-        if (data.playerId === this.socket.id && this.localPlayer) {
-          this.localPlayer.setHasFlag(false);
-        }
-
-        // If the flag carrier was another player, remove flag
         const player = this.players.get(data.playerId);
-        
-        if (player) {
-          player.setHasFlag(false);
+
+        if (!player) {
+          console.error("FLAG_DROPPED RECEIVED FOR NON-EXISTING PLAYER");
+          return;
         }
 
-        // Create the flag entity in the map
+        player.setHasFlag(false);
+
+        /**
+         * When a player takes the flag we remove it from the scene so
+         * when is dropped we need to add it back to the scene in the last position.
+         */
         this.mapRenderer.addFlag({
           type: EntityType.FLAG,
           position: data.position,
         });
-
-        // Clear flag carrier status
-        this.flagCarrier = null;
 
         // Show message
         this.showGameMessage("Flag has been dropped!", "yellow", 3000);
@@ -543,7 +471,7 @@ export class Game {
 
     // Join the game when connected
     this.socket.on("connect", () => {
-      console.warn('CONNECTED TO SERVER');
+      console.warn("CONNECTED TO SERVER");
       this.socket.emit(SocketEvents.JOIN);
     });
   }
@@ -557,10 +485,6 @@ export class Game {
     const isLocalPlayer = playerState.id === this.socket.id;
 
     const player = new Player(playerState, isLocalPlayer);
-
-    // Ensure flag status is correctly set
-    if (playerState.hasFlag) {
-    }
 
     // Add player mesh to scene
     this.scene.add(player.mesh);
@@ -586,8 +510,8 @@ export class Game {
         object.userData &&
         object.userData.isCollidable &&
         (object.userData.type === EntityType.WALL ||
-         object.userData.type === EntityType.BILLBOARD ||
-         object.userData.type === EntityType.CUBE)
+          object.userData.type === EntityType.BILLBOARD ||
+          object.userData.type === EntityType.CUBE)
       ) {
         this.walls.push(object);
       }
@@ -1162,12 +1086,5 @@ export class Game {
     duration: number = 3000
   ): void {
     this.ui.showGameMessage(message, color, duration);
-    
-    // Play win/lose sound when game ends
-    if (message.includes("win") || message.includes("Win")) {
-      const isWin =
-        message.includes("You win") || message.includes("Your team wins");
-      this.sound.playGameOverSound(isWin);
-    }
   }
 }
