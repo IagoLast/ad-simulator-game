@@ -791,32 +791,6 @@ export class Game {
 
     // Update local player if exists
     if (this.localPlayer && !this.gameOver) {
-      // Ensure flag visibility is correct
-      if (this.flagCarrier) {
-        // Check if the flag carrier has the flag visible
-        if (this.flagCarrier === this.socket.id && this.localPlayer) {
-          if (!this.localPlayer.isCarryingFlag()) {
-            this.localPlayer.setHasFlag(true);
-          }
-        } else if (this.players.has(this.flagCarrier)) {
-          const carrier = this.players.get(this.flagCarrier);
-          if (carrier && !carrier.isCarryingFlag()) {
-            carrier.setHasFlag(true);
-          }
-        }
-      } else {
-        // Make sure no player has a flag when there's no carrier
-        for (const [id, player] of this.players.entries()) {
-          if (player.isCarryingFlag()) {
-            player.setHasFlag(false);
-          }
-        }
-
-        if (this.localPlayer.isCarryingFlag()) {
-          this.localPlayer.setHasFlag(false);
-        }
-      }
-
       // Handle shooting
       if (this.controls.isShooting() && !this.localPlayer.isDying()) {
         this.handlePlayerShoot();

@@ -18,6 +18,8 @@ export class Player {
   private playerRadius: number = 0.5;
   private lastSentPosition: THREE.Vector3;
   private positionThreshold: number = 0.1;
+  private lastSentRotation: { x: number; y: number };
+  private rotationThreshold: number = 0.05;
   private playerBody: THREE.Mesh;
   private eyes: THREE.Group;
   private teamId: number;
@@ -51,6 +53,7 @@ export class Player {
       y: playerState.rotation.y || 0, // Horizontal rotation (yaw)
     };
     this.lastSentPosition = this.position.clone();
+    this.lastSentRotation = { x: this.rotation.x, y: this.rotation.y };
     this.teamId = playerState.teamId;
     this.hasFlag = playerState.hasFlag || false;
     this.health =
@@ -356,7 +359,7 @@ export class Player {
    * @param deltaTime Time since last update in seconds
    * @param movement Movement input { forward, backward, left, right, mouseX, mouseY }
    * @param walls Array of wall objects for collision detection
-   * @returns Whether the position has changed enough to send to server
+   * @returns Whether the position or rotation has changed enough to send to server
    */
   public update(
     deltaTime: number,
@@ -394,12 +397,23 @@ export class Player {
     const distance = this.position.distanceTo(this.lastSentPosition);
     const positionChanged = distance > this.positionThreshold;
 
+    // Check for significant rotation changes
+    const rotationXDiff = Math.abs(this.rotation.x - this.lastSentRotation.x);
+    const rotationYDiff = Math.abs(this.rotation.y - this.lastSentRotation.y);
+    const rotationChanged = rotationXDiff > this.rotationThreshold || rotationYDiff > this.rotationThreshold;
+
     // Update last sent position if changed significantly
     if (positionChanged) {
       this.lastSentPosition.copy(this.position);
     }
 
-    return positionChanged;
+    // Update last sent rotation if changed significantly
+    if (rotationChanged) {
+      this.lastSentRotation = { x: this.rotation.x, y: this.rotation.y };
+    }
+
+    // Return true if either position or rotation changed significantly
+    return positionChanged || rotationChanged;
   }
 
   /**
