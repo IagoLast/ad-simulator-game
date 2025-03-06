@@ -28,7 +28,8 @@ export enum EntityType {
   EXIT = 'exit',
   BILLBOARD = 'billboard',
   FLAG = 'flag',
-  PROJECTILE = 'projectile'
+  PROJECTILE = 'projectile',
+  CUBE = 'cube'
 }
 
 /**
@@ -99,6 +100,18 @@ export interface Projectile extends MapEntity {
   };
   color: string; // Color of the projectile (team color)
   timestamp: number; // When it was fired
+}
+
+/**
+ * Cube entity in the map
+ */
+export interface Cube extends MapEntity {
+  type: EntityType.CUBE;
+  dimensions: {
+    width: number;
+    height: number;
+    depth: number;
+  }; // Custom dimensions (x,y,z)
 }
 
 /**

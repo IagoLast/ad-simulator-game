@@ -746,7 +746,8 @@ export class Game {
         object.userData &&
         object.userData.isCollidable &&
         (object.userData.type === EntityType.WALL ||
-          object.userData.type === EntityType.BILLBOARD)
+         object.userData.type === EntityType.BILLBOARD ||
+         object.userData.type === EntityType.CUBE)
       ) {
         this.walls.push(object);
       }

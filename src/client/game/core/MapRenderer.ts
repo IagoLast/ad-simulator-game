@@ -5,8 +5,10 @@ import {
   Flag,
   MapData,
   MapEntity,
+  Cube,
 } from "../../../shared/types";
 import { BillboardClass } from "../3d/billboard.3d";
+import { Cube3D } from '../objects/Cube3D';
 
 /**
  * MapRenderer class for rendering map entities like walls and exits
@@ -29,26 +31,26 @@ export class MapRenderer {
    * @param mapData Map data containing walls and exits
    */
   public renderMap(mapData: MapData): void {
-    // Clear any existing map entities
+    // Clear existing map
     this.clearMap();
 
-    // Create new map entities
+    // Add new entities
     if (mapData.entities) {
       mapData.entities.forEach((entity) => {
-        const object = this.createEntity(entity);
-        if (object) {
-          this.scene.add(object);
-          this.mapEntities.push(object);
+        const obj = this.createEntity(entity);
+        if (obj) {
+          this.scene.add(obj);
+          this.mapEntities.push(obj);
 
-          // Store reference to flag object if it's a flag
+          // Store flag object reference
           if (entity.type === EntityType.FLAG) {
-            this.flagObject = object;
+            this.flagObject = obj;
           }
         }
       });
     }
 
-    // Add a ground plane
+    // Add ground
     this.addGround(mapData.width, mapData.height);
   }
 
@@ -74,29 +76,19 @@ export class MapRenderer {
   }
 
   /**
-   * Clear all map entities from the scene
+   * Clear the map and remove all entities
    */
   public clearMap(): void {
-    // Remove all map entities from the scene
+    // Remove entities from scene
     this.mapEntities.forEach((entity) => {
       this.scene.remove(entity);
-
-      // Type casting to access geometry and material properties
-      const mesh = entity as THREE.Mesh;
-      if (mesh.geometry) {
-        mesh.geometry.dispose();
-      }
-
-      if (mesh.material) {
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((material) => material.dispose());
-        } else {
-          mesh.material.dispose();
-        }
-      }
     });
 
+    // Clear entities array
     this.mapEntities = [];
+
+    // Reset flag
+    this.flagObject = null;
   }
 
   /**
@@ -114,6 +106,8 @@ export class MapRenderer {
         return this.createBillboard(entity as Billboard);
       case EntityType.FLAG:
         return this.createFlag(entity as Flag);
+      case EntityType.CUBE:
+        return this.createCube(entity as Cube);
       default:
         console.warn(`Unknown entity type: ${entity.type}`);
         return null;
@@ -215,33 +209,6 @@ export class MapRenderer {
    */
   private createBillboard(entity: Billboard): THREE.Group {
     return BillboardClass.create(entity);
-  }
-
-  /**
-   * Add a ground plane to the scene
-   * @param width Width of the ground
-   * @param height Height of the ground
-   */
-  private addGround(width: number, height: number): void {
-    const geometry = new THREE.PlaneGeometry(width, height);
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x333333,
-      roughness: 0.8,
-      metalness: 0.2,
-    });
-
-    const ground = new THREE.Mesh(geometry, material);
-    ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-    ground.position.y = 0;
-
-    // Enable shadows
-    ground.receiveShadow = true;
-
-    // Set name for later identification
-    ground.name = "ground";
-
-    this.scene.add(ground);
-    this.mapEntities.push(ground);
   }
 
   /**
@@ -371,5 +338,50 @@ export class MapRenderer {
 
     // Start the animation
     animate();
+  }
+
+  /**
+   * Create a cube object
+   * @param entity Cube entity data
+   * @returns THREE.Group representing the cube
+   */
+  private createCube(entity: Cube): THREE.Group {
+    // Create the cube using the dedicated class
+    const cube = new Cube3D(entity);
+    
+    // Mark as collidable for collision detection
+    cube.mesh.userData = {
+      type: EntityType.CUBE,
+      isCollidable: true
+    };
+    
+    return cube.mesh;
+  }
+
+  /**
+   * Add a ground plane to the scene
+   * @param width Width of the ground
+   * @param height Height of the ground
+   */
+  private addGround(width: number, height: number): void {
+    const geometry = new THREE.PlaneGeometry(width, height);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      roughness: 0.8,
+      metalness: 0.2,
+    });
+
+    const ground = new THREE.Mesh(geometry, material);
+    ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+    ground.position.y = 0;
+
+    // Enable shadows
+    ground.receiveShadow = true;
+
+    // Set name for later identification
+    ground.name = "ground";
+
+    this.scene.add(ground);
+    this.mapEntities.push(ground);
   }
 }
