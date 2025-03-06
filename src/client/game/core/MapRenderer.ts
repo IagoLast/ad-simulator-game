@@ -6,7 +6,7 @@ import {
   MapData,
   MapEntity,
 } from "../../../shared/types";
-import { BillboardClass } from "../3d/billboard.class";
+import { BillboardClass } from "../3d/billboard.3d";
 
 /**
  * MapRenderer class for rendering map entities like walls and exits

@@ -538,7 +538,7 @@ export class GameServer {
     // Schedule restart in 4
     this.restartTimeout = setTimeout(() => {
       this.restartGame();
-    }, 4000);
+    }, 2000);
   }
 
   /**
