@@ -22,7 +22,7 @@ interface GapPosition {
 export class MapGenerator {
   private width: number;
   private height: number;
-  private billboardTexts: string[] = ["www.timetime.in", "www.theirstack.com"];
+  private billboardTexts: string[] = ["www.timetime.in", "www.theirstack.com", "https://andru.codes/"];
 
   // Different billboard types/configurations
   private billboardTypes = [
