@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Multiplayer FPS Game</title>
+    <title>Ad simulator</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -17,6 +17,7 @@
             margin: 0;
             overflow: hidden;
             font-family: "Press Start 2P", system-ui;
+            background-color: #111;
         }
 
         canvas {
@@ -60,109 +61,324 @@
             transform: translateX(-50%);
         }
 
-        #game-selector {
+        #game-lobby {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 30px;
             border-radius: 10px;
             color: white;
             text-align: center;
             display: none;
+            width: 80%;
+            max-width: 600px;
+            box-shadow: 0 0 20px rgba(0, 100, 0, 0.5);
+            border: 2px solid #3e8e41;
         }
 
-        #game-selector h1 {
+        #game-lobby h1 {
             margin-top: 0;
             color: #FFF;
+            text-shadow: 0 0 10px #4CAF50;
+            margin-bottom: 30px;
         }
 
-        #game-selector ul {
-            list-style: none;
-            padding: 0;
-            margin: 20px 0;
+        .game-input {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
         }
 
-        #game-selector li {
-            margin: 10px 0;
+        #game-name {
+            padding: 10px;
+            width: 60%;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid #4CAF50;
+            color: white;
+            font-size: 14px;
+            margin-right: 10px;
         }
 
-        #game-selector a {
-            display: block;
+        .create-game-btn {
             padding: 10px 20px;
             background-color: #4CAF50;
             color: white;
-            text-decoration: none;
-            border-radius: 5px;
+            border: none;
+            cursor: pointer;
             font-weight: bold;
             transition: background-color 0.3s;
         }
 
-        #game-selector a:hover {
+        .create-game-btn:hover {
             background-color: #3e8e41;
+        }
+
+        #games-list {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 0;
+        }
+
+        .game-item {
+            margin: 10px 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .game-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .game-id {
+            font-size: 16px;
+            color: #FFF;
+            margin-bottom: 5px;
+        }
+
+        .game-meta {
+            font-size: 12px;
+            color: #AAA;
+        }
+
+        .game-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .join-btn, .copy-btn {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .copy-btn {
+            background-color: #2196F3;
+        }
+
+        .join-btn:hover {
+            background-color: #3e8e41;
+        }
+
+        .copy-btn:hover {
+            background-color: #0b7dda;
+        }
+
+        .no-games {
+            text-align: center;
+            color: #AAA;
+            padding: 20px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 1000;
+            display: none;
         }
     </style>
 </head>
 
 <body>
     <div id="crosshair"></div>
-    <div id="game-selector">
-        <h1>Select a Game</h1>
-        <ul id="game-list">
-            <!-- Game links will be inserted here -->
+    <div id="game-lobby">
+        <h1>Ad simulator</h1>
+        <div class="game-input">
+            <input type="text" id="game-name" placeholder="Enter a game name" maxlength="20">
+            <button class="create-game-btn" onclick="createGame()">Create Game</button>
+        </div>
+        
+        <h2>Active Games</h2>
+        <ul id="games-list">
+            <!-- Game items will be populated here -->
         </ul>
     </div>
+
+    <div class="toast" id="toast">Link copied to clipboard!</div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="bundle.js"></script>
     <script>
-        // Check if we're on the root path and show the game selector
-        if (window.location.pathname === '/') {
-            document.getElementById('game-selector').style.display = 'block';
-
-            // Fetch available games from the server
+        // Show toast message
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Function to validate a game name
+        function isValidGameName(name) {
+            // Only allow alphanumeric characters and hyphens, and enforce minimum length
+            return /^[a-zA-Z0-9-]{3,20}$/.test(name);
+        }
+        
+        // Function to create a new game
+        function createGame() {
+            const gameNameInput = document.getElementById('game-name');
+            let gameName = gameNameInput.value.trim();
+            
+            if (!gameName) {
+                showToast('Please enter a game name');
+                return;
+            }
+            
+            // Clean up game name (only allow alphanumeric and hyphens)
+            gameName = gameName.replace(/[^a-zA-Z0-9-]/g, '');
+            
+            // Additional validation
+            if (!isValidGameName(gameName)) {
+                showToast('Game name must be 3-20 characters and contain only letters, numbers, and hyphens');
+                return;
+            }
+            
+            // Create the game via API
+            fetch('/games', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ gameId: gameName })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Navigate to the game using the returned URL
+                    window.location.href = data.url;
+                } else {
+                    showToast('Error creating game: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error creating game:', error);
+                showToast('Error creating game: Network error');
+            });
+        }
+        
+        // Function to join a game
+        function joinGame(gameId) {
+            window.location.href = `/${gameId}`;
+        }
+        
+        // Function to copy game link
+        function copyGameLink(gameId) {
+            const gameUrl = `${window.location.origin}/${gameId}`;
+            navigator.clipboard.writeText(gameUrl)
+                .then(() => {
+                    showToast('Game link copied to clipboard!');
+                })
+                .catch(err => {
+                    console.error('Failed to copy: ', err);
+                    showToast('Failed to copy link');
+                });
+        }
+        
+        // Function to format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+        
+        // Function to format player count
+        function formatPlayerCount(count) {
+            return count === 1 ? '1 player' : `${count} players`;
+        }
+        
+        // Function to load active games
+        function loadGames() {
             fetch('/games')
                 .then(response => response.json())
                 .then(data => {
-                    const gameList = document.getElementById('game-list');
-
-                    // If no games available, show a create game option
+                    const gamesList = document.getElementById('games-list');
+                    gamesList.innerHTML = '';
+                    
                     if (data.games.length === 0) {
-                        const createGameLi = document.createElement('li');
-                        const createGameInput = document.createElement('input');
-                        createGameInput.type = 'text';
-                        createGameInput.placeholder = 'Enter new game name';
-                        createGameInput.style.padding = '10px';
-                        createGameInput.style.marginBottom = '10px';
-                        createGameInput.style.width = '100%';
-
-                        const createGameButton = document.createElement('a');
-                        createGameButton.href = '#';
-                        createGameButton.textContent = 'Create New Game';
-                        createGameButton.onclick = function (e) {
-                            e.preventDefault();
-                            const gameName = createGameInput.value.trim();
-                            if (gameName) {
-                                window.location.href = `/${gameName}`;
-                            }
-                        };
-
-                        createGameLi.appendChild(createGameInput);
-                        createGameLi.appendChild(createGameButton);
-                        gameList.appendChild(createGameLi);
+                        gamesList.innerHTML = '<div class="no-games">No active games. Create one to get started!</div>';
+                        return;
                     }
-
-                    // Add existing games
+                    
                     data.games.forEach(game => {
                         const li = document.createElement('li');
-                        const a = document.createElement('a');
-                        a.href = `/${game}`;
-                        a.textContent = game.charAt(0).toUpperCase() + game.slice(1).replace(/-/g, ' ');
-                        li.appendChild(a);
-                        gameList.appendChild(li);
+                        li.className = 'game-item';
+                        
+                        const gameInfo = document.createElement('div');
+                        gameInfo.className = 'game-info';
+                        
+                        const gameId = document.createElement('div');
+                        gameId.className = 'game-id';
+                        gameId.textContent = game.id;
+                        
+                        const gameMeta = document.createElement('div');
+                        gameMeta.className = 'game-meta';
+                        gameMeta.textContent = `Created: ${formatDate(game.createdAt)} | ${formatPlayerCount(game.players)}`;
+                        
+                        gameInfo.appendChild(gameId);
+                        gameInfo.appendChild(gameMeta);
+                        
+                        const gameActions = document.createElement('div');
+                        gameActions.className = 'game-actions';
+                        
+                        const joinBtn = document.createElement('button');
+                        joinBtn.className = 'join-btn';
+                        joinBtn.textContent = 'Join';
+                        joinBtn.onclick = function() { joinGame(game.id); };
+                        
+                        const copyBtn = document.createElement('button');
+                        copyBtn.className = 'copy-btn';
+                        copyBtn.textContent = 'Copy Link';
+                        copyBtn.onclick = function() { copyGameLink(game.id); };
+                        
+                        gameActions.appendChild(joinBtn);
+                        gameActions.appendChild(copyBtn);
+                        
+                        li.appendChild(gameInfo);
+                        li.appendChild(gameActions);
+                        gamesList.appendChild(li);
                     });
                 })
-                .catch(error => console.error('Error fetching games:', error));
+                .catch(error => {
+                    console.error('Error fetching games:', error);
+                });
+        }
+        
+        // Listen for Enter key in game name input
+        document.getElementById('game-name').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                createGame();
+            }
+        });
+        
+        // Check if we're on the root path and show the lobby
+        if (window.location.pathname === '/') {
+            document.getElementById('game-lobby').style.display = 'block';
+            
+            // Load games initially
+            loadGames();
+            
+            // Refresh games list every 10 seconds
+            setInterval(loadGames, 10000);
         }
     </script>
 </body>

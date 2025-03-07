@@ -14,6 +14,7 @@ import {
 } from "../../shared/types";
 import { MapGenerator } from "./MapGenerator";
 import { WebRTCSignalingHandler } from "./WebRTCSignalingHandler";
+import { EventEmitter } from "events";
 
 /**
  * Projectile class for server-side physics simulation
@@ -88,7 +89,7 @@ class Projectile {
 /**
  * GameServer handles all the game logic and player connections
  */
-export class GameServer {
+export class GameServer extends EventEmitter {
   private instanceId: string;
   private io: Server | Namespace;
   private gameState: GameState;
@@ -116,6 +117,7 @@ export class GameServer {
    * @param io Socket.io server or namespace instance
    */
   constructor(io: Server | Namespace) {
+    super();
     this.instanceId = Math.random().toString(36).substring(2, 10);
     console.log(`[GAMESERVER:${this.instanceId}] Creating new GameServer for namespace: ${(io as Namespace).name || "/"}`);
     
@@ -425,6 +427,7 @@ export class GameServer {
 
         // Add player to game state
         this.players.set(socket.id, player);
+        this.updatePlayerCount(); // Update and emit player count change
         this.broadcastGameState();
 
         // Broadcast to other players that a new player has joined
@@ -541,6 +544,7 @@ export class GameServer {
 
           // Remove player
           this.players.delete(socket.id);
+          this.updatePlayerCount(); // Update and emit player count change
           this.broadcastGameState();
 
           // Notify other players about the disconnection
@@ -788,5 +792,13 @@ export class GameServer {
 
       this.scheduleRestart();
     }
+  }
+
+  /**
+   * Update the player count and emit the change event
+   */
+  private updatePlayerCount(): void {
+    const count = this.players.size;
+    this.emit('playerCountChanged', count);
   }
 }

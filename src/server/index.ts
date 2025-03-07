@@ -36,8 +36,8 @@ console.log(
 );
 console.log("=".repeat(50));
 
-// Define game paths
-const gamePaths: string[] = [];
+// Track active games
+const activeGames: {id: string, createdAt: string, players: number}[] = [];
 
 const gameServers = new Map<string, GameServer>();
 
@@ -52,8 +52,81 @@ app.get("/health", (req, res) => {
 // List all available games
 app.get("/games", (req, res) => {
   res.json({
-    games: gamePaths,
+    games: activeGames,
   });
+});
+
+// Create a new game
+app.post("/games", express.json(), (req, res) => {
+  let gameId = req.body.gameId || Math.random().toString(36).substring(2, 10);
+  
+  // Remove any invalid characters from the gameId (only allow alphanumeric and hyphens)
+  gameId = gameId.replace(/[^a-zA-Z0-9-]/g, '');
+  
+  // Server-side validation
+  if (gameId.length < 3) {
+    return res.status(400).json({
+      success: false,
+      message: "Game name must be at least 3 characters long"
+    });
+  }
+  
+  // Ensure the gameId has a valid prefix
+  if (!gameId.startsWith('game-')) {
+    gameId = `game-${gameId}`;
+  }
+  
+  // Check if game already exists
+  if (gameServers.has(gameId)) {
+    // Game exists, handle joining an existing game
+    res.json({ 
+      success: true,
+      gameId: gameId,
+      url: `/${gameId}`,
+      message: "Joining existing game"
+    });
+    return;
+  }
+  
+  // Create a new game
+  try {
+    const namespace = io.of(`/${gameId}`);
+    const gameServer = new GameServer(namespace);
+    gameServer.initialize();
+    
+    // Track player count changes
+    gameServer.on('playerCountChanged', (count: number) => {
+      // Find the game in activeGames and update player count
+      const game = activeGames.find(g => g.id === gameId);
+      if (game) {
+        game.players = count;
+      }
+    });
+    
+    gameServers.set(gameId, gameServer);
+    
+    // Add to active games list
+    activeGames.push({
+      id: gameId,
+      createdAt: new Date().toISOString(),
+      players: 0
+    });
+    
+    console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] New game created: ${gameId}`);
+    
+    res.json({ 
+      success: true,
+      gameId: gameId,
+      url: `/${gameId}`,
+      message: "Game created successfully"
+    });
+  } catch (error) {
+    console.error(`[INSTANCE:${SERVER_INSTANCE_ID}] Error creating game:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating game"
+    });
+  }
 });
 
 // Añadir un listener a nivel global para todas las conexiones de Socket.IO
@@ -68,22 +141,51 @@ io.on('connection', (socket) => {
 
 // Modificar la lógica de manejo de rutas para ser más explícita sobre qué instancia está procesando la solicitud
 app.get("/:id", (req, res) => {
-  console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] HTTP Request for game /${req.params.id}`);
+  const id = req.params.id;
+  
+  // Check if this is a game route (must start with game-)
+  if (!id.startsWith('game-')) {
+    // If not a game route, serve the static file or the index page
+    return res.sendFile(path.join(__dirname, "../public/index.html"));
+  }
+  
+  console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] HTTP Request for game /${id}`);
   console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] Existing gameServers: ${Array.from(gameServers.keys()).join(", ")}`);
   
   // Obtener namespaces disponibles en Socket.IO
   const socketNamespaces = Array.from(io._nsps.keys()).join(", ");
   console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] Existing Socket.IO namespaces: ${socketNamespaces}`);
 
-  if (!gameServers.has(req.params.id)) {
-    const namespace = io.of(`/${req.params.id}`);
+  if (!gameServers.has(id)) {
+    const namespace = io.of(`/${id}`);
     const gameServer = new GameServer(namespace);
     gameServer.initialize();
-    gameServers.set(req.params.id, gameServer);
-    console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] New server created at /${req.params.id}`);
+    
+    // Track player count changes
+    gameServer.on('playerCountChanged', (count: number) => {
+      // Find the game in activeGames and update player count
+      const game = activeGames.find(g => g.id === id);
+      if (game) {
+        game.players = count;
+      }
+    });
+    
+    gameServers.set(id, gameServer);
+    
+    // Add to active games list if not already there
+    const gameExists = activeGames.some(game => game.id === id);
+    if (!gameExists) {
+      activeGames.push({
+        id: id,
+        createdAt: new Date().toISOString(),
+        players: 0
+      });
+    }
+    
+    console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] New server created at /${id}`);
     console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] After creation - gameServers: ${Array.from(gameServers.keys()).join(", ")}`);
   } else {
-    console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] Using existing server for /${req.params.id}`);
+    console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] Using existing server for /${id}`);
   }
   
   res.sendFile(path.join(__dirname, "../public/index.html"));
@@ -101,7 +203,4 @@ server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
   console.log(`Environment variables: PORT=${process.env.PORT}`);
   console.log(`Open http://localhost:${PORT} in your browser to play locally`);
-  console.log(
-    `Available games: ${gamePaths.map((path) => `/${path}`).join(", ")}`
-  );
 });
