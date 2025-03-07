@@ -58,12 +58,25 @@ export class WebRTCAudioManager {
     });
     
     // Handle incoming answers
-    this.socket.on(WebRTCEvents.ANSWER, (data: { answer: RTCSessionDescriptionInit, from: string }) => {
+    this.socket.on(WebRTCEvents.ANSWER, async (data: { answer: RTCSessionDescriptionInit, from: string }) => {
       console.log(`Received answer from ${data.from}`);
       const peer = this.peers.get(data.from);
       if (peer) {
-        peer.peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
-          .catch(error => console.error('Error setting remote description:', error));
+        try {
+          const peerConnection = peer.peerConnection;
+          
+          // Check connection state before setting remote description
+          if (peerConnection.signalingState !== 'stable') {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            console.log(`Successfully set remote description for ${data.from}`);
+          } else {
+            console.warn(`Ignoring answer from ${data.from} - connection already in stable state`);
+          }
+        } catch (error) {
+          console.error('Error setting remote description:', error);
+        }
+      } else {
+        console.warn(`Received answer from unknown peer: ${data.from}`);
       }
     });
     
@@ -167,6 +180,14 @@ export class WebRTCAudioManager {
    * @param peerId ID of the player to connect to
    */
   private createPeerConnection(peerId: string): RTCPeerConnection {
+    // Check if we already have a connection to this peer
+    if (this.peers.has(peerId)) {
+      console.log(`Using existing peer connection for ${peerId}`);
+      return this.peers.get(peerId)!.peerConnection;
+    }
+
+    console.log(`Creating new peer connection for ${peerId}`);
+    
     // Create a new RTCPeerConnection
     const peerConnection = new RTCPeerConnection(this.rtcConfig);
     
@@ -199,8 +220,16 @@ export class WebRTCAudioManager {
       audioElement.play().catch(error => console.error('Error playing audio:', error));
     };
     
+    // Log state changes for debugging
+    peerConnection.onsignalingstatechange = () => {
+      console.log(`Signaling state changed for ${peerId}:`, peerConnection.signalingState);
+    };
+    
     // Create and send an offer if we are starting the connection
-    this.createOffer(peerId, peerConnection);
+    // Only create an offer if we have local audio enabled
+    if (this.localAudioEnabled) {
+      this.createOffer(peerId, peerConnection);
+    }
     
     return peerConnection;
   }
@@ -234,27 +263,34 @@ export class WebRTCAudioManager {
    * @param peerId ID of the player who sent the offer
    */
   private async handleOffer(offer: RTCSessionDescriptionInit, peerId: string): Promise<void> {
-    let peerConnection = this.peers.get(peerId)?.peerConnection;
-    
-    // If we don't have a connection to this peer yet, create one
-    if (!peerConnection) {
-      peerConnection = this.createPeerConnection(peerId);
-    }
-    
-    // Set the remote description
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    
-    // Create and send an answer
     try {
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
+      let peerConnection = this.peers.get(peerId)?.peerConnection;
       
-      this.socket.emit(WebRTCEvents.ANSWER, {
-        to: peerId,
-        answer: answer
-      });
+      // If we don't have a connection to this peer yet, create one
+      if (!peerConnection) {
+        peerConnection = this.createPeerConnection(peerId);
+      }
+      
+      // Check connection state before setting remote description
+      if (peerConnection.signalingState === 'stable') {
+        // Set the remote description
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        // Create and send an answer
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        this.socket.emit(WebRTCEvents.ANSWER, {
+          to: peerId,
+          answer: answer
+        });
+        
+        console.log(`Successfully sent answer to ${peerId}`);
+      } else {
+        console.warn(`Cannot handle offer from ${peerId} - connection not in stable state`);
+      }
     } catch (error) {
-      console.error('Error creating answer:', error);
+      console.error('Error handling offer:', error);
     }
   }
   
