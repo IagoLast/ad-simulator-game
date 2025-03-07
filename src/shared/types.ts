@@ -168,7 +168,7 @@ export const WeaponConfig = {
 };
 
 /**
- * Events sent between client and server
+ * Socket events used for game communication
  */
 export enum SocketEvents {
   JOIN = 'join',
@@ -187,6 +187,19 @@ export enum SocketEvents {
   PLAYER_HIT = 'player_hit',
   PLAYER_DIED = 'player_died',
   PLAYER_RESPAWNED = 'player_respawned'
+}
+
+/**
+ * Socket events used for WebRTC signaling
+ */
+export enum WebRTCEvents {
+  JOIN = 'webrtc-join',
+  LEAVE = 'webrtc-leave',
+  NEW_PLAYER = 'webrtc-new-player',
+  PLAYER_LEFT = 'webrtc-player-left',
+  OFFER = 'webrtc-offer',
+  ANSWER = 'webrtc-answer',
+  ICE_CANDIDATE = 'webrtc-ice-candidate'
 }
 
 /**

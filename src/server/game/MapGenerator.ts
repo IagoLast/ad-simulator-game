@@ -70,7 +70,7 @@ export class MapGenerator {
     this.addExits(entities);
 
     // Add billboards as obstacles
-    // this.addBillboards(entities);
+    this.addBillboards(entities);
 
     // Add the flag for capture the flag gameplay
     this.addFlag(entities);

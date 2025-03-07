@@ -21,6 +21,7 @@ export class ControlsDesktop {
   private isPointerLocked: boolean;
   private canvas: HTMLCanvasElement;
   private shooting: boolean = false;
+  private toggleAudioPressed: boolean = false;
   
   /**
    * Initialize controls
@@ -47,7 +48,7 @@ export class ControlsDesktop {
     document.addEventListener('pointerlockchange', this.onPointerLockChange.bind(this));
     
     // Initialize keys
-    for (const key of ['w', 'a', 's', 'd']) {
+    for (const key of ['w', 'a', 's', 'd', 'c']) {
       this.keys[key] = false;
     }
   }
@@ -63,7 +64,7 @@ export class ControlsDesktop {
     
     // Update key state
     const key = event.key.toLowerCase();
-    if (['w', 'a', 's', 'd'].includes(key)) {
+    if (['w', 'a', 's', 'd', 'c'].includes(key)) {
       this.keys[key] = true;
     }
   }
@@ -73,7 +74,7 @@ export class ControlsDesktop {
    */
   private onKeyUp(event: KeyboardEvent): void {
     const key = event.key.toLowerCase();
-    if (['w', 'a', 's', 'd'].includes(key)) {
+    if (['w', 'a', 's', 'd', 'c'].includes(key)) {
       this.keys[key] = false;
     }
   }
@@ -179,5 +180,26 @@ export class ControlsDesktop {
    */
   public isControlActive(): boolean {
     return this.isPointerLocked;
+  }
+  
+  /**
+   * Check if the audio toggle key (C) was pressed
+   * Returns true only once per key press to avoid toggling rapidly
+   */
+  public isAudioTogglePressed(): boolean {
+    const isPressed = this.isKeyPressed('c');
+    
+    // If key is pressed but wasn't pressed before
+    if (isPressed && !this.toggleAudioPressed) {
+      this.toggleAudioPressed = true;
+      return true;
+    }
+    
+    // If key is released, reset the toggleAudioPressed state
+    if (!isPressed && this.toggleAudioPressed) {
+      this.toggleAudioPressed = false;
+    }
+    
+    return false;
   }
 } 

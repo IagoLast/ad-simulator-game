@@ -10,6 +10,7 @@ export class ControlsMobile {
   private touchpadContainer!: HTMLDivElement;
   private touchpadInner!: HTMLDivElement;
   private fireButton!: HTMLDivElement;
+  private audioButton!: HTMLDivElement;
   
   private joystickActive: boolean = false;
   private joystickPosition = { x: 0, y: 0 };
@@ -19,6 +20,7 @@ export class ControlsMobile {
   private touchpadCurrentPosition = { x: 0, y: 0 };
   private touchpadPosition = { x: 0, y: 0 };
   private shooting: boolean = false;
+  private audioTogglePressed: boolean = false;
   
   private movementDirection = {
     forward: false,
@@ -140,10 +142,30 @@ export class ControlsMobile {
     this.fireButton.style.justifyContent = 'center';
     this.fireButton.innerHTML = '<span style="color: white; font-weight: bold;">FIRE</span>';
     
+    // Create audio toggle button
+    this.audioButton = document.createElement('div');
+    this.audioButton.className = 'mobile-control audio-button';
+    this.audioButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" fill="#FFFFFF"/></svg>`;
+    Object.assign(this.audioButton.style, {
+      position: 'absolute',
+      bottom: '20px',
+      right: '20px',
+      width: '50px',
+      height: '50px',
+      borderRadius: '50%',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      cursor: 'pointer',
+      zIndex: '9999'
+    });
+    
     // Add controls to document
     document.body.appendChild(this.joystickContainer);
     document.body.appendChild(this.touchpadContainer);
     document.body.appendChild(this.fireButton);
+    document.body.appendChild(this.audioButton);
   }
   
   /**
@@ -167,6 +189,19 @@ export class ControlsMobile {
     // Handle orientation changes
     window.addEventListener('orientationchange', this.onOrientationChange.bind(this));
     window.addEventListener('resize', this.onOrientationChange.bind(this));
+    
+    // Set up audio button event listeners
+    this.audioButton.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this.audioTogglePressed = true;
+    });
+    
+    this.audioButton.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      setTimeout(() => {
+        this.audioTogglePressed = false;
+      }, 100);
+    });
     
     // Initial orientation adjustment
     this.onOrientationChange();
@@ -530,6 +565,7 @@ export class ControlsMobile {
     this.joystickContainer.style.display = 'block';
     this.touchpadContainer.style.display = 'block';
     this.fireButton.style.display = 'flex';
+    this.audioButton.style.display = 'flex';
   }
   
   /**
@@ -539,6 +575,7 @@ export class ControlsMobile {
     this.joystickContainer.style.display = 'none';
     this.touchpadContainer.style.display = 'none';
     this.fireButton.style.display = 'none';
+    this.audioButton.style.display = 'none';
   }
   
   /**
@@ -601,5 +638,16 @@ export class ControlsMobile {
       }
     `;
     document.head.appendChild(style);
+  }
+  
+  /**
+   * Check if the audio toggle button was pressed
+   */
+  public isAudioTogglePressed(): boolean {
+    if (this.audioTogglePressed) {
+      this.audioTogglePressed = false; // Reset after being read once
+      return true;
+    }
+    return false;
   }
 } 

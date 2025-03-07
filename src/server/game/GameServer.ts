@@ -13,6 +13,7 @@ import {
   WeaponConfig,
 } from "../../shared/types";
 import { MapGenerator } from "./MapGenerator";
+import { WebRTCSignalingHandler } from "./WebRTCSignalingHandler";
 
 /**
  * Projectile class for server-side physics simulation
@@ -108,6 +109,7 @@ export class GameServer {
   private respawnTimeouts: Map<string, NodeJS.Timeout> = new Map();
   private lastUpdate: number = Date.now();
   private FLAG_CAPTURE_RADIUS: number = 1.5;
+  private webRTCSignalingHandler!: WebRTCSignalingHandler;
 
   /**
    * Create a new GameServer instance
@@ -377,6 +379,12 @@ export class GameServer {
    * Initialize the server and set up event handlers
    */
   public initialize(): void {
+    console.log("GameServer initializing...");
+    this.instanceId = Math.random().toString(36).substring(2, 9);
+    
+    // Initialize WebRTC signaling handler
+    this.webRTCSignalingHandler = new WebRTCSignalingHandler(this.io as Namespace);
+    
     console.log(`[GAMESERVER:${this.instanceId}] Initializing Socket.IO event handlers`);
     
     this.io.on("connection", (socket: Socket) => {

@@ -1,23 +1,26 @@
-import * as THREE from "three";
 import { io, Socket } from "socket.io-client";
+import * as THREE from "three";
 import {
   EntityType,
   GameState,
+  HitEvent,
   MapData,
   PlayerMovement,
   PlayerState,
-  SocketEvents,
   ShootEvent,
-  WeaponType,
-  HitEvent,
+  SocketEvents,
   WeaponConfig,
+  WeaponType,
 } from "../../shared/types";
-import { Player } from "./Player";
+import controlsFactory from "./controls/controls.factory";
 import { MapRenderer } from "./core/MapRenderer";
 import { Sound } from "./core/Sound";
+import { AudioUI } from "./network/AudioUI";
+import { WebRTCAudioManager } from "./network/WebRTCAudioManager";
+import { Player } from "./Player";
 import { UI } from "./UI";
-import controlsFactory from "./controls/controls.factory";
-import { MovementInput } from "./controls/ControlsDesktop";
+import { ControlsDesktop } from "./controls/ControlsDesktop";
+import { ControlsMobile } from "./controls/ControlsMobile";
 
 /**
  * Game class for a first-person multiplayer 3D game
@@ -29,7 +32,7 @@ export class Game {
   private socket: Socket;
   private players: Map<string, Player>;
   private localPlayer: Player | null;
-  private controls: any; // Will be either ControlsDesktop or ControlsMobile
+  private controls: ControlsDesktop | ControlsMobile;
   private lastUpdateTime: number;
   private mapRenderer: MapRenderer;
   private walls: THREE.Object3D[] = [];
@@ -37,6 +40,8 @@ export class Game {
   private winningTeam: number | null = null;
   private sound: Sound;
   private ui: UI;
+  private webRTCAudioManager: WebRTCAudioManager;
+  private audioUI: AudioUI;
 
   /**
    * Create a new game instance
@@ -72,9 +77,11 @@ export class Game {
     // Initialize map renderer
     this.mapRenderer = new MapRenderer(this.scene);
 
+    // Connect to the Socket.IO server
+    const gameId = namespace;
+
     // Initialize socket connection with proper Socket.IO configuration for Docker
-    this.socket = io(namespace, {
-      // Forcing new connection to avoid issues with the namespace
+    this.socket = io(gameId, {
       forceNew: true,
       transports: ["websocket", "polling"],
       reconnection: true,
@@ -82,6 +89,11 @@ export class Game {
       reconnectionDelay: 1000,
       timeout: 20000,
     });
+
+    // Create audio components
+    this.webRTCAudioManager = new WebRTCAudioManager(this.socket, gameId);
+    this.audioUI = new AudioUI();
+    this.audioUI.show();
 
     // Initialize players collection
     this.players = new Map();
@@ -555,6 +567,9 @@ export class Game {
 
     // Update controls and get input state
     this.controls.update(deltaTime);
+
+    // Check for audio toggle
+    this.handleAudioToggle();
 
     // Update local player if exists
     if (this.localPlayer && !this.gameOver) {
@@ -1088,5 +1103,32 @@ export class Game {
     duration: number = 3000
   ): void {
     this.ui.showGameMessage(message, color, duration);
+  }
+
+  /**
+   * Handle audio toggle (C key)
+   */
+  private async handleAudioToggle(): Promise<void> {
+    if (this.controls.isAudioTogglePressed()) {
+      const isEnabled = await this.webRTCAudioManager.toggleAudio();
+      const playerCount = this.players.size;
+      this.audioUI.updateStatus(isEnabled, playerCount);
+      
+      if (isEnabled) {
+        this.showGameMessage("Voice chat enabled", "#4CAF50");
+      } else {
+        this.showGameMessage("Voice chat disabled", "white");
+      }
+    }
+  }
+
+  /**
+   * Clean up resources when shutting down
+   */
+  public cleanup(): void {
+    if (this.webRTCAudioManager) {
+      this.webRTCAudioManager.cleanup();
+    }
+
   }
 }
