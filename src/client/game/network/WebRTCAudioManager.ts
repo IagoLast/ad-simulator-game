@@ -5,6 +5,7 @@ export interface PeerConnection {
   peerConnection: RTCPeerConnection;
   audioTrack: MediaStreamTrack | null;
   audioElement?: HTMLAudioElement;
+  pendingCandidates: RTCIceCandidate[]; // Buffer for ICE candidates that arrive early
 }
 
 /**
@@ -49,6 +50,14 @@ export class WebRTCAudioManager {
     this.socket.on(WebRTCEvents.NEW_PLAYER, (playerId: string) => {
       console.log(`[VOICECHAT] New player joined the audio network: ${playerId}`);
       this.createPeerConnection(playerId);
+      
+      // Only the peer with the "lower" ID creates the offer to avoid collisions
+      if (this.socket.id && this.shouldCreateOffer(this.socket.id, playerId)) {
+        console.log(`[VOICECHAT] We should initiate the connection with ${playerId}`);
+        this.initiateConnection(playerId);
+      } else {
+        console.log(`[VOICECHAT] Waiting for ${playerId} to initiate the connection`);
+      }
     });
     
     // Handle player leaving
@@ -71,13 +80,11 @@ export class WebRTCAudioManager {
         try {
           const peerConnection = peer.peerConnection;
           
-          // Check connection state before setting remote description
-          if (peerConnection.signalingState !== 'stable') {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            console.log(`[VOICECHAT] Successfully set remote description for ${data.from}`);
-          } else {
-            console.warn(`[VOICECHAT] Ignoring answer from ${data.from} - connection already in stable state`);
-          }
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+          console.log(`[VOICECHAT] Successfully set remote description for ${data.from}`);
+          
+          // After setting the remote description, add any pending ICE candidates
+          this.addPendingIceCandidates(data.from);
         } catch (error) {
           console.error(`[VOICECHAT] Error setting remote description:`, error);
         }
@@ -89,15 +96,84 @@ export class WebRTCAudioManager {
     // Handle ICE candidates
     this.socket.on(WebRTCEvents.ICE_CANDIDATE, (data: { candidate: RTCIceCandidateInit, from: string }) => {
       console.log(`[VOICECHAT] Received ICE candidate from ${data.from}`);
-      const peer = this.peers.get(data.from);
-      if (peer && data.candidate) {
-        peer.peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate))
-          .then(() => console.log(`[VOICECHAT] Successfully added ICE candidate from ${data.from}`))
-          .catch(error => console.error(`[VOICECHAT] Error adding ice candidate:`, error));
-      } else {
-        console.warn(`[VOICECHAT] Could not find peer for ICE candidate: ${data.from}`);
-      }
+      this.handleIceCandidate(data.from, data.candidate);
     });
+  }
+  
+  /**
+   * Determine if we should create the offer based on socket IDs
+   * This prevents both sides from creating offers simultaneously
+   */
+  private shouldCreateOffer(localId: string | undefined, remoteId: string): boolean {
+    if (!localId) return false;
+    return localId < remoteId; // Simple comparison to determine who initiates
+  }
+  
+  /**
+   * Handle an incoming ICE candidate
+   */
+  private handleIceCandidate(peerId: string, candidateInit: RTCIceCandidateInit): void {
+    const peer = this.peers.get(peerId);
+    if (!peer) {
+      console.warn(`[VOICECHAT] Received ICE candidate for unknown peer: ${peerId}`);
+      return;
+    }
+    
+    const candidate = new RTCIceCandidate(candidateInit);
+    
+    // Check if we can add the ICE candidate right away or need to queue it
+    const peerConnection = peer.peerConnection;
+    
+    // If we have a remote description, we can add the candidate immediately
+    if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+      console.log(`[VOICECHAT] Adding ICE candidate immediately for ${peerId}`);
+      peerConnection.addIceCandidate(candidate)
+        .then(() => console.log(`[VOICECHAT] Successfully added ICE candidate for ${peerId}`))
+        .catch(error => console.error(`[VOICECHAT] Error adding ICE candidate:`, error));
+    } else {
+      // Otherwise, we queue the candidate for later processing
+      console.log(`[VOICECHAT] Queuing ICE candidate for ${peerId} (remote description not set yet)`);
+      peer.pendingCandidates.push(candidate);
+    }
+  }
+  
+  /**
+   * Add any pending ICE candidates for a peer after the remote description is set
+   */
+  private addPendingIceCandidates(peerId: string): void {
+    const peer = this.peers.get(peerId);
+    if (!peer || peer.pendingCandidates.length === 0) return;
+    
+    console.log(`[VOICECHAT] Adding ${peer.pendingCandidates.length} pending ICE candidates for ${peerId}`);
+    
+    peer.pendingCandidates.forEach(candidate => {
+      peer.peerConnection.addIceCandidate(candidate)
+        .then(() => console.log(`[VOICECHAT] Successfully added pending ICE candidate for ${peerId}`))
+        .catch(error => console.error(`[VOICECHAT] Error adding pending ICE candidate:`, error));
+    });
+    
+    // Clear the pending candidates
+    peer.pendingCandidates = [];
+  }
+  
+  /**
+   * Initiate a WebRTC connection with a peer
+   */
+  private initiateConnection(peerId: string): void {
+    console.log(`[VOICECHAT] Initiating connection with ${peerId}`);
+    
+    const peer = this.peers.get(peerId);
+    if (!peer) {
+      console.error(`[VOICECHAT] Cannot initiate connection - peer not found: ${peerId}`);
+      return;
+    }
+    
+    if (this.localAudioEnabled) {
+      console.log(`[VOICECHAT] Creating offer for ${peerId} (local audio enabled)`);
+      this.createOffer(peerId, peer.peerConnection);
+    } else {
+      console.log(`[VOICECHAT] Not creating offer for ${peerId} (local audio disabled)`);
+    }
   }
   
   /**
@@ -166,6 +242,11 @@ export class WebRTCAudioManager {
           const audioTrack = this.localStream.getAudioTracks()[0];
           peer.peerConnection.addTrack(audioTrack, this.localStream);
           peer.audioTrack = audioTrack;
+          
+          // Initiate connection if we should be the one creating the offer
+          if (this.socket.id && this.shouldCreateOffer(this.socket.id, peerId)) {
+            this.initiateConnection(peerId);
+          }
         }
       });
       
@@ -435,8 +516,12 @@ export class WebRTCAudioManager {
     const peerConnection = new RTCPeerConnection(this.rtcConfig);
     console.log(`[VOICECHAT] RTCPeerConnection created:`, peerConnection);
     
-    // Add the peer to our map
-    this.peers.set(peerId, { peerConnection, audioTrack: null });
+    // Add the peer to our map with an empty array for pending candidates
+    this.peers.set(peerId, { 
+      peerConnection, 
+      audioTrack: null,
+      pendingCandidates: []
+    });
     
     // Add local audio tracks if available
     if (this.localStream) {
@@ -475,7 +560,7 @@ export class WebRTCAudioManager {
       }
     };
     
-    // Handle incoming tracks - use our new handler method
+    // Handle incoming tracks - use our handler method
     peerConnection.ontrack = (event) => {
       this.handleRemoteTrack(event, peerId);
     };
@@ -485,14 +570,7 @@ export class WebRTCAudioManager {
       console.log(`[VOICECHAT] Signaling state changed for ${peerId}:`, peerConnection.signalingState);
     };
     
-    // Create and send an offer if we are starting the connection
-    // Only create an offer if we have local audio enabled
-    if (this.localAudioEnabled) {
-      console.log(`[VOICECHAT] Creating offer for ${peerId} (local audio enabled)`);
-      this.createOffer(peerId, peerConnection);
-    } else {
-      console.log(`[VOICECHAT] Not creating offer for ${peerId} (local audio disabled)`);
-    }
+    // We no longer automatically create offers here - that's handled by initiateConnection
     
     return peerConnection;
   }
@@ -531,19 +609,25 @@ export class WebRTCAudioManager {
   private async handleOffer(offer: RTCSessionDescriptionInit, peerId: string): Promise<void> {
     try {
       console.log(`[VOICECHAT] Handling offer from ${peerId}`);
-      let peerConnection = this.peers.get(peerId)?.peerConnection;
+      let peerConnection: RTCPeerConnection;
       
-      // If we don't have a connection to this peer yet, create one
-      if (!peerConnection) {
+      // Get or create peer connection
+      if (this.peers.has(peerId)) {
+        peerConnection = this.peers.get(peerId)!.peerConnection;
+      } else {
         console.log(`[VOICECHAT] Creating new peer connection for offer from ${peerId}`);
         peerConnection = this.createPeerConnection(peerId);
       }
       
-      // Check connection state before setting remote description
-      if (peerConnection.signalingState === 'stable') {
+      // Check if we can set the remote description
+      const currentState = peerConnection.signalingState;
+      if (currentState !== 'have-local-offer') {
         // Set the remote description
         console.log(`[VOICECHAT] Setting remote description for ${peerId}`);
         await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        // Add any pending ICE candidates now that we have the remote description
+        this.addPendingIceCandidates(peerId);
         
         // Create and send an answer
         console.log(`[VOICECHAT] Creating answer for ${peerId}`);
@@ -560,7 +644,21 @@ export class WebRTCAudioManager {
         
         console.log(`[VOICECHAT] Successfully sent answer to ${peerId}`);
       } else {
-        console.warn(`[VOICECHAT] Cannot handle offer from ${peerId} - connection not in stable state (${peerConnection.signalingState})`);
+        console.warn(`[VOICECHAT] Cannot handle offer from ${peerId} - connection in state ${currentState}`);
+        
+        // Glare condition handling (both sides sent offers)
+        if (currentState === 'have-local-offer') {
+          // Resolve the glare by determining who should be the offerer
+          // If we should be the offerer, ignore their offer
+          if (this.socket.id && this.shouldCreateOffer(this.socket.id, peerId)) {
+            console.log(`[VOICECHAT] Ignoring offer due to glare resolution - we should be the offerer`);
+          } else {
+            // Otherwise, roll back and accept their offer
+            console.log(`[VOICECHAT] Rolling back our offer and accepting remote offer due to glare resolution`);
+            await peerConnection.setLocalDescription({type: 'rollback'});
+            await this.handleOffer(offer, peerId); // Try again after rollback
+          }
+        }
       }
     } catch (error) {
       console.error(`[VOICECHAT] Error handling offer:`, error);
