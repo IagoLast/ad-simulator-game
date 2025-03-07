@@ -49,6 +49,52 @@ app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
+// Secret endpoint to clear inactive games (0 players)
+app.get("/admin/cleanup-games", (req, res) => {
+  // Get count before cleanup
+  const beforeCount = activeGames.length;
+  
+  // Find games with 0 players
+  const inactiveGames = activeGames.filter(game => game.players === 0);
+  
+  // Remove inactive games from activeGames array (modify in place)
+  const activeGameIds = activeGames
+    .filter(game => game.players > 0)
+    .map(game => game.id);
+  
+  // Remove items in place
+  for (let i = activeGames.length - 1; i >= 0; i--) {
+    if (!activeGameIds.includes(activeGames[i].id)) {
+      activeGames.splice(i, 1);
+    }
+  }
+  
+  // Clean up game servers
+  inactiveGames.forEach(game => {
+    if (gameServers.has(game.id)) {
+      // Close the namespace/server if possible
+      try {
+        const namespace = io.of(`/${game.id}`);
+        namespace.disconnectSockets(true);
+      } catch (error) {
+        console.error(`Error disconnecting sockets for game ${game.id}:`, error);
+      }
+      
+      // Remove from game servers map
+      gameServers.delete(game.id);
+      console.log(`[INSTANCE:${SERVER_INSTANCE_ID}] Cleaned up inactive game: ${game.id}`);
+    }
+  });
+  
+  res.json({
+    success: true,
+    message: `Cleaned up ${inactiveGames.length} inactive games`,
+    beforeCount,
+    afterCount: activeGames.length,
+    removedGames: inactiveGames.map(g => g.id)
+  });
+});
+
 // List all available games
 app.get("/games", (req, res) => {
   res.json({
