@@ -27,6 +27,7 @@ export class MapGenerator {
     "theirstack.com",
     "https://mcp-framework.com/",
     "Hawkings Education",
+    "deiser.com",
   ];
 
   // Different billboard types/configurations
