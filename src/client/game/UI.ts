@@ -34,7 +34,7 @@ export class UI {
     teamInfo.style.position = "absolute";
     teamInfo.style.top = "10px";
     teamInfo.style.right = "10px";
-    teamInfo.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+    teamInfo.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
     teamInfo.style.color = "white";
     teamInfo.style.padding = "10px";
     teamInfo.style.borderRadius = "5px";
@@ -144,12 +144,12 @@ export class UI {
     // Create status for each team
     const createTeamStatus = (teamId: number, players: PlayerState[], isLocalTeam: boolean) => {
       const teamColor = teamId === 1 ? "#ff4d4d" : "#4d4dff";
-      const teamName = teamId === 1 ? "Red Team" : "Blue Team";
+      const teamName = teamId === 1 ? "Red" : "Blue";
       
       const teamDiv = document.createElement("div");
       teamDiv.style.marginBottom = "10px";
-      teamDiv.style.border = isLocalTeam ? `2px solid ${teamColor}` : "none";
-      teamDiv.style.padding = isLocalTeam ? "5px" : "0";
+      teamDiv.style.border = isLocalTeam ? `2px solid ${teamColor}` : `2px solid transparent`;
+      teamDiv.style.padding = '5px';
       teamDiv.style.borderRadius = "3px";
       
       const teamHeader = document.createElement("div");
@@ -226,7 +226,7 @@ export class UI {
       const carrierName = carrier ? carrier.id : "Unknown";
       const carrierTeam = carrier ? (carrier.teamId === 1 ? "Red" : "Blue") : "Unknown";
       
-      flagStatus.textContent = `${carrierName} (${carrierTeam}) has the flag!`;
+      flagStatus.textContent = `${carrierName.substring(0, 6)} has the flag!`;
       flagStatus.style.color = carrier && carrier.teamId === 1 ? "#ff4d4d" : "#4d4dff";
     } else {
       flagStatus.textContent = "Flag is available!";
