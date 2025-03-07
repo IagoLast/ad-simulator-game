@@ -30,6 +30,31 @@ export class AudioUI {
     
     // Add to document
     document.body.appendChild(this.container);
+    
+    // Add media query for mobile devices
+    this.addMobileStyles();
+  }
+  
+  /**
+   * Add mobile-specific styles using media query
+   */
+  private addMobileStyles(): void {
+    // Create a style element
+    const style = document.createElement('style');
+    style.textContent = `
+      @media screen and (max-width: 768px) {
+        #audio-ui-container {
+          font-size: 10px !important;
+          padding: 5px !important;
+          bottom: 10px !important;
+          right: 10px !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Add an ID to the container so the CSS selector can target it
+    this.container.id = 'audio-ui-container';
   }
   
   /**
@@ -56,7 +81,12 @@ export class AudioUI {
       this.statusElement.textContent = `Voice Chat: ON (${playerCount} players connected)`;
       this.statusElement.style.color = '#4CAF50'; // Green
     } else {
-      this.statusElement.textContent = 'Voice Chat: OFF (Press C to toggle)';
+      // Different text for mobile vs desktop
+      if (window.innerWidth <= 768) {
+        this.statusElement.textContent = 'Voice Chat: OFF (Use mic button)';
+      } else {
+        this.statusElement.textContent = 'Voice Chat: OFF (Press C to toggle)';
+      }
       this.statusElement.style.color = 'white';
     }
   }
