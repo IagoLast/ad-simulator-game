@@ -28,7 +28,9 @@ export class MapGenerator {
     "https://mcp-framework.com/",
     "Hawkings Education",
     "deiser.com",
-    "codely.com"
+    "codely.com",
+    "laporra.io",
+    "trainerstudio.io"
   ];
 
   // Different billboard types/configurations
